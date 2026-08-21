@@ -31,7 +31,15 @@ You **do not edit the `/morning` command**. You copy one config file, fill in yo
 ### Step 1 — install the skills where skills actually load from (2 min)
 
 ```bash
+# in a standalone clone of the package:
+cd morning-loop
+# or, if you are inside the PO workspace:
 cd 05-automation/agent-manager/morning-loop-share
+```
+
+Then:
+
+```bash
 ./scripts/install-skills.sh --dry-run     # see what it would do
 ./scripts/install-skills.sh               # do it, then verify itself
 ```

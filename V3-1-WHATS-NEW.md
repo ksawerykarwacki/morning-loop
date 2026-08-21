@@ -76,7 +76,15 @@ Same for platform fixes, which have been landing in Jira comments and staying th
 ## Upgrading from v3
 
 ```bash
+# in a standalone clone of the package:
+cd morning-loop
+# or, if you are inside the PO workspace:
 cd 05-automation/agent-manager/morning-loop-share
+```
+
+Then:
+
+```bash
 ./scripts/install-skills.sh          # installs 15 loadable skills, then verifies
 python3 scripts/doctor.py            # fix anything it flags before your next run
 ```
@@ -86,6 +94,23 @@ Then read `ADOPT-MORNING.md` steps 3 to 5 if you have never done a JTBD capture,
 If the doctor flags a rule you cannot fix today, **comment the rule out.** A commented rule is a visible gap. An active rule pointing at nothing is an invisible one, and that is the whole reason this release exists.
 
 ---
+
+---
+
+## Fixed after publishing, by cloning it and trying to adopt it
+
+The package went to GitLab, then I cloned it as a new adopter and worked through `ADOPT-MORNING.md`. Four things broke. All four were the same shape as the bug this release exists to kill: **a state reported as one thing when it is really another.**
+
+| | What it did | What it does now |
+|---|---|---|
+| 11 | Reported `/morning` and `/standup` as **MISSING** in a fresh clone, when they ship in `commands/` and were merely not installed. The fix text also named a folder the package no longer uses | Three-state, matching skills: `ok` / **`NOT INSTALLED`** (run the installer) / `MISSING` (not in the package, pull) |
+| 12 | `install-skills.sh --repo` resolved its target three levels above the package, correct in the workspace and **outside the repo** in a standalone clone | Uses the real git root |
+| 13 | Reported the notifier as **MISSING** while it sat in `scripts/`, next to the script doing the reporting | Resolves in both layouts |
+| 14 | Setup step 1 told you to `cd 05-automation/agent-manager/morning-loop-share`, **a directory that does not exist in a clone** | Layout-agnostic, correct in both |
+
+None would have broken anything permanently. Each would have cost twenty confusing minutes, and two of them would have looked exactly like the failure three developers spent a month reporting.
+
+**A clean-clone adoption run now gates every publish of this package.** Writing the validator was not enough; the validator had to be validated by using it the way an adopter does.
 
 ## Honest status
 

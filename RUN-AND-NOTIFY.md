@@ -99,4 +99,6 @@ The permission contract is unchanged: `unattended_allowed` still covers only rea
 
 ## Open decision for the squad (Tomek)
 
-The cloud-reachable home for the package is the fork in the road. Options: mirror `morning-loop-share` to a cloud-reachable git; or keep Lab-GitLab as source of truth and publish a read-only cloud mirror the routines pull. Either way, until this is decided, "unattended" means "a hand-synced copy runs in the cloud," and that is worth stating plainly rather than implying full automation.
+**RESOLVED 2026-08-21: the package home is `gitlab.thenetcircle.lab/tomzduda/morning-loop`**, its own internally-shared repo. It is deliberately NOT the PO workspace repo, because GitLab access is repo-level and that repo contains a squad member's performance review. The paragraph below is kept for the reasoning that led here.
+
+The cloud-reachable home for the package was the fork in the road. Options: mirror `morning-loop-share` to a cloud-reachable git; or keep Lab-GitLab as source of truth and publish a read-only cloud mirror the routines pull. Either way, until this is decided, "unattended" means "a hand-synced copy runs in the cloud," and that is worth stating plainly rather than implying full automation.
