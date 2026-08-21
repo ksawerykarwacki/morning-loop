@@ -232,9 +232,16 @@ def main() -> int:
                                "fix": "not in this package either. Pull the latest package."})
         blocked += 1
 
-    notifier = repo / "05-automation/agent-manager/scripts/notify.py"
-    paths_state = [{"what": "notifier", "state": "ok" if notifier.is_file() else "MISSING",
-                    "at": str(notifier)}]
+    # The notifier lives in a different place in the workspace layout and in a
+    # standalone package clone. Reporting MISSING when it is sitting in scripts/
+    # next to this file is the same false negative the commands check just had.
+    notifier = next((c for c in (repo / "05-automation/agent-manager/scripts/notify.py",
+                                 repo / "scripts/notify.py",
+                                 here / "notify.py") if c.is_file()), None)
+    paths_state = [{"what": "notifier", "state": "ok" if notifier else "MISSING",
+                    "at": str(notifier) if notifier else "not found in either layout"}]
+    if not notifier:
+        blocked += 1
     for key in ("commitments_ledger", "run_log"):
         raw = (cfg.get("paths") or {}).get(key)
         if raw:
