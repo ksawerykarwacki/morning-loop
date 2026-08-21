@@ -1,5 +1,8 @@
 # Morning loop: v2 → v3
 
+> **Looking for the overview to share with the team? Read `V2-TO-V3.1.md`.** This file is the per-release detail.
+
+
 **Written 2026-08-21.** Every row below traces to something that actually happened, either in the run log or in a squad member's report-back on KM-14119. Nothing here is a good idea somebody had; if a change has no evidence column, it should not be in the release.
 
 **The one-line version:** v2 made the loop proactive. **v3 makes it produce work.** Across seven consecutive v2 prep runs the loop planned 2 to 6 items every morning and dispatched zero of them, and every adopter reported the same thing in different words.

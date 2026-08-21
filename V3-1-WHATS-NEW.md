@@ -1,5 +1,8 @@
 # Morning loop v3.1 — adopt it to your role, and contribute back
 
+> **Looking for the overview to share with the team? Read `V2-TO-V3.1.md`.** This file is the per-release detail.
+
+
 **2026-08-21.** v3.1 is a small release with one large finding behind it.
 
 **The finding:** three developers reported that the loop's dev drafters never ran. They were all right, and the cause was neither their config nor their role. **Skills load from exactly two places, and the package shipped them somewhere else.** A config could name a skill that could not possibly resolve, and nothing anywhere checked.
