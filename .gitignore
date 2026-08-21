@@ -9,3 +9,8 @@ delivery-receipts/
 launchd*.log
 *.before-v3.1
 .DS_Store
+
+# commands/ is the canonical source. A .claude/ inside the package would be a
+# second copy, and would make doctor report commands as installed when they are
+# only sitting in the clone.
+.claude/
