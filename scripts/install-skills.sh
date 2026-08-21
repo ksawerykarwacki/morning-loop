@@ -34,7 +34,10 @@ DRY=0
 
 for arg in "$@"; do
   case "$arg" in
-    --repo)    TARGET="$(cd "$PKG/../../.." && pwd)/.claude/skills" ;;
+    # --repo installs into the git root of wherever you are, not a fixed number of
+    # levels above the package. The old form assumed the workspace layout and walked
+    # outside the repo entirely when the package was cloned standalone.
+    --repo)    TARGET="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PKG")/.claude/skills" ;;
     --dry-run) DRY=1 ;;
     -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "unknown option: $arg"; exit 2 ;;

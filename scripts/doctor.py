@@ -213,12 +213,24 @@ def main() -> int:
     # The other half of Xitong's half-adopt: the command itself.
     cmd_states = []
     for cmd in ("morning", "standup"):
-        found = [str(p) for p in (repo / ".claude/commands" / f"{cmd}.md",
-                                  home / ".claude/commands" / f"{cmd}.md") if p.is_file()]
-        cmd_states.append({"command": f"/{cmd}", "state": "ok" if found else "MISSING",
-                           "at": found[0] if found else None})
-        if not found:
-            blocked += 1
+        installed = [str(p) for p in (repo / ".claude/commands" / f"{cmd}.md",
+                                      home / ".claude/commands" / f"{cmd}.md") if p.is_file()]
+        if installed:
+            cmd_states.append({"command": f"/{cmd}", "state": "ok", "at": installed[0]})
+            continue
+        # Same three-state distinction as skills: shipped-but-not-installed needs a
+        # different fix from missing-entirely, and conflating them is what sent people
+        # hunting for files that were sitting in the package all along.
+        shipped = [str(p) for p in (repo / "commands" / f"{cmd}.md",
+                                    repo / "05-automation/agent-manager/morning-loop-share/commands" / f"{cmd}.md")
+                   if p.is_file()]
+        if shipped:
+            cmd_states.append({"command": f"/{cmd}", "state": "NOT INSTALLED", "at": shipped[0],
+                               "fix": "run ./scripts/install-skills.sh (it installs commands too)"})
+        else:
+            cmd_states.append({"command": f"/{cmd}", "state": "MISSING", "at": None,
+                               "fix": "not in this package either. Pull the latest package."})
+        blocked += 1
 
     notifier = repo / "05-automation/agent-manager/scripts/notify.py"
     paths_state = [{"what": "notifier", "state": "ok" if notifier.is_file() else "MISSING",
@@ -253,7 +265,9 @@ def main() -> int:
     print("\nCOMMANDS")
     for c in cmd_states:
         print(f"  {'✓' if c['state'] == 'ok' else '✗'} {c['command']:<10} {c['state']}"
-              + (f"  {c['at']}" if c["at"] else "  copy .claude/commands/ from the package"))
+              + (f"  {c['at']}" if c.get("at") else ""))
+        if c.get("fix"):
+            print(f"      fix: {c['fix']}")
 
     print("\nPATHS")
     for p in paths_state:
