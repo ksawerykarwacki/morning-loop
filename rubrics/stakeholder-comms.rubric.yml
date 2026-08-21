@@ -1,0 +1,146 @@
+schema_version: 1
+extends: _base
+task: "Channel-appropriate stakeholder comms drafted from a source doc (sprint report / decision / incident / launch / experiment / research) — one tailored draft per warranted channel (GC Confluence, GC Mattermost, Escort CRM, Supporter, KM Growth), a Ready-to-Send checklist, and [REVIEW] flags"
+calibration_target: "the named channel's audience could receive each draft as-is — Andre/Julius/GC on the exec channels, the squad on Escort CRM — with no rewrite. Ships EXTERNALLY, so grade strict."
+created: 2026-07-06
+
+goldens:
+  - path: "09-archive/stakeholder-updates-batch-20260514.md"
+    note: >-
+      Full channel batch, the primary VOICE + ROUTING exemplar. Each channel gets a different angle
+      (GC Confluence = OKR-tied milestone read; Escort CRM = conversational team context with the 'why';
+      GC Mattermost / KM Growth = explicit N/A with reason). Honest watch-item led (client W1 retention
+      19.5% vs 35.6% peak, root cause unconfirmed) not spun; every claim quantified; asks named
+      (Xitong + Daniel for staging access); [REVIEW] markers each carry a specific reason; verify-before-external
+      note on OKR %s; no user-facing (escort) content.
+  - path: "04-features/ai-assistant/ai-stakeholder-update.md"
+    note: >-
+      DATA-DISCIPLINE reference. Data-backed and honest about a bad week (🔴 HIGH RISK, sprint goal 0/9,
+      capacity gap named); every metric tagged 'Verified from Jira'; a named Decisions & Actions Required
+      section with owners (PO descope, Legal consent, AI Squad staging). Its [REQUIRES PO INPUT] /
+      [DATA NOT AVAILABLE] / [NEEDS PO ESTIMATE] placeholders are the CORRECT honest gap-flag behaviour
+      this skill sanctions (see gaps_flagged_not_faked) — they are labelled gaps, not values faked as fact,
+      so they satisfy grounding rather than violate it.
+# NOTE on base `grounded`: for THIS skill an explicit [REVIEW: reason] / [REQUIRES PO INPUT] marker is a
+# feature, not a placeholder violation. Grade `grounded` as "no UNLABELLED invented value passed off as
+# real"; a clearly-flagged gap is honest and passes. gaps_flagged_not_faked below encodes this.
+# NOTE on no_em_dashes: the batch golden predates the no-em-dash house rule (dated 2026-05-14) and is
+# em-dash-heavy. It is a VOICE / ROUTING / TAILORING exemplar (those checks are format-independent);
+# no_em_dashes is calibrated against the CURRENT house rule, not this pre-rule artifact. A regenerated
+# version of the same content today must contain zero em dashes. (Same treatment as the GC rubric's
+# legacy May golden.)
+
+known_reject:
+  - >-
+    One generic update copy-pasted to every channel: identical text in GC Confluence, Escort CRM, and
+    KM Growth with no per-channel angle and no Andre / Julius / Iren tailoring; asks written as 'need some
+    design help' and 'we should sync soon' with no named owner or why-now; claims like 'AI adoption is
+    going well' and 'retention is trending the right way' with no numbers; a green-wall tone with no miss
+    or risk; an OKR target stated as fact ('KR2.1 will hit 67%') with no Iren caveat; the decision buried
+    as 'let's discuss'; a DAU figure invented with no [REVIEW] flag; escort-facing DM copy pasted in;
+    a launch announced to KM Growth before GC and the squad; em dashes throughout. Must fail
+    per_channel_tailored, gc_stakeholder_filters, named_asks, quantified_claims, honest_no_spin,
+    decision_action_unambiguous, targets_flag_iren, gaps_flagged_not_faked, no_user_facing_content,
+    sequencing_correct, na_outputs_justified, and no_em_dashes.
+
+checks:
+  # ---- VOICE / TAILORING (the core value: right message for the specific reader) ----
+  - id: per_channel_tailored
+    type: binary_llm
+    severity: gate
+    scope: voice
+    statement: "Each generated channel draft says something channel-specific — a different angle, depth, and tone per audience. No two channels carry substantially the same copy. GC = OKR/roadmap read; Escort CRM = conversational team context with the 'why'; KM Growth = plain-language outcome + open ask."
+    rationale: "The skill's whole reason to exist. Golden batch gives each channel a distinct angle; listed common mistake is 'posting the same content to all channels'. One-size-fits-all is the primary failure mode, so this is the ship test for this skill."
+
+  - id: gc_stakeholder_filters
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Within Growth Circle output, content is framed for the specific readers: Andre gets hypothesis->data->conclusion with every claim data-backed; Julius gets top-line escort impact framed as 'here's what we're seeing, your read?'; Christoph gets on-track/at-risk + directional trend; Iren gets raw metric data not just conclusions. Andre-style evidence structure does NOT leak into the Escort CRM post."
+    rationale: "Step 3 stakeholder filters + common mistake 'Andre-style evidence structure in the Escort CRM channel'. Tailoring is per-person inside GC, not just per-channel."
+
+  - id: named_asks
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Every dependency or ask names a person or squad, the specific thing needed, and why now. No unowned 'need X' or 'we should sync'."
+    rationale: "Golden names 'Xitong + Daniel for staging access'; ai-stakeholder golden's actions each have an owner. Vague unowned asks are dead on arrival with execs."
+
+  - id: quantified_claims
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "Every progress/impact claim carries a real number or a precise status. No vague 'going well', 'trending the right way', 'good adoption'."
+    rationale: "Andre's rule (any claim needs data backing); goldens quantify everything (19.5% vs 35.6%, 176 WAU, 670+ responses, 141.3h gap)."
+
+  - id: honest_no_spin
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Misses, risks, and things-not-working are stated plainly (each ideally with the fix/plan in flight), not buried or spun. An all-green update with no miss on a real week is a red flag."
+    rationale: "Ying wants honest gaps; golden leads on a declining-retention watch item and a 🔴 HIGH RISK sprint. Spin is the opposite of the transparency principle."
+
+  - id: decision_action_unambiguous
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Where the source calls for a decision or action, the specific thing requested is unambiguous — what is being decided/done, by whom, and by when. Not 'let's discuss' with no framed choice."
+    rationale: "ai-stakeholder golden's Decisions & Actions Required section frames each ask concretely (which tickets to descope, staging access). A buried/vague ask defeats the point of the update."
+
+  - id: targets_flag_iren
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "No numeric OKR target is stated as settled fact — any is marked 'needs Iren input' (or equivalent) until she confirms. Reporting a measured current value is fine; asserting a target/projection as fact is not."
+    rationale: "Analyst rule (memory: Iren owns numeric targets). block: a fabricated target reaching GC/execs is unrecoverable."
+
+  # ---- DATA INTEGRITY ----
+  - id: gaps_flagged_not_faked
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "Where the source doc lacks a figure, the gap is explicitly marked with [REVIEW: reason] or [REQUIRES PO INPUT] — never filled with a fabricated or unlabelled value. Metrics needing verification before an external post carry a [REVIEW: verify ...] flag."
+    rationale: "Skill quality checks: 'no fabricated metrics — use [REQUIRES PO INPUT]'. Reconciles base `grounded`: a labelled gap is honest and correct; a silent invented number is the unrecoverable failure. block."
+
+  - id: review_markers_specific
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "Every [REVIEW] marker states a specific reason and action (e.g. 'confirm DAU against Amplitude before posting'), not a bare 'check this'."
+    rationale: "Skill quality check + common mistake 'leaving [REVIEW] items unmarked because the PO probably knows'. A vague flag is not actionable."
+
+  # ---- ROUTING / FORMAT ----
+  - id: no_user_facing_content
+    type: binary_llm
+    severity: block
+    scope: voice
+    statement: "Output is internal channel comms only. No escort/client-facing copy — no DMs to escorts, forum posts, or app-store listings. That belongs in Chris's brief, not here."
+    rationale: "Common mistake: 'generating user-facing content belongs in Chris's brief'. block: user-facing text drafted here can be posted to the wrong audience — a hard boundary violation."
+
+  - id: sequencing_correct
+    type: binary_llm
+    severity: normal
+    scope: format
+    statement: "For feature announcements the order is GC Mattermost -> Escort CRM -> Supporter -> KM Growth (stakeholders, then team, then company — never reverse), and any Escort-CRM-before-KM-Growth prerequisite is noted in the Ready-to-Send checklist."
+    rationale: "Step 2 key rule + common mistake 'briefing the team before informing the Growth Circle'. Wrong order leaks a launch company-wide before stakeholders are briefed."
+
+  - id: na_outputs_justified
+    type: structural
+    severity: normal
+    scope: format
+    statement: "Every channel that is NOT generated is listed with a stated reason (e.g. 'KM Growth — not warranted: no company-wide learning in source'), not silently dropped. A Ready-to-Send checklist is present."
+    rationale: "Steps 6-7 + quality check 'N/A outputs include a reason, not just silence'. Golden marks all four skipped channels with a reason."
+
+  - id: channel_language_correct
+    type: binary_llm
+    severity: normal
+    scope: format
+    statement: "All channel posts are in English EXCEPT the Supporter channel, which is bilingual (German first, then English in the same message). No internal channel post is written in German."
+    rationale: "Language rule + common mistake 'writing internal channel posts in German'. Supporter is the sole bilingual exception."
+
+  - id: no_em_dashes
+    type: structural
+    severity: normal
+    scope: format
+    statement: "The output contains zero em dashes, in every channel draft."
+    rationale: "House rule; these drafts ship externally to execs and company-wide, where an em dash is an AI tell. Base has this; repeated and emphasised because every stakeholder-comms output is shared."

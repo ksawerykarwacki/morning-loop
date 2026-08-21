@@ -1,0 +1,108 @@
+schema_version: 1
+extends: _base
+task: "Bi-weekly ops update for Confluence (achievements + external blockers, plain bullets) plus a PO-only Every.to intelligence brief appended after a separator"
+calibration_target: "an ops-meeting reader (squad leads / ops forum), copy-paste into Confluence as-is; achievements outcome-framed and blockers actionable, no rewrite"
+created: 2026-07-06
+
+goldens:
+  - path: "02-stakeholder-comms/updates/ops-update-20260518.md"
+    note: "Sprint 3+4. Exemplary STRUCTURE + VOICE: 8 outcome-framed achievement bullets tagged to KRs (no raw Jira keys in achievements); blockers each name the owner + the ask + quantified impact ('9 FE/BE tickets parked in Code Review', 'each sprint of delay roughly halves the addressable base', '12-week WAU window ends 2026-07-28'); missed sprint goal surfaced plainly ('Sprint 4 closed without iOS going live'); Every.to brief appended behind the NOT-FOR-CONFLUENCE separator."
+  - path: "02-stakeholder-comms/updates/ops-update-20260513.md"
+    note: "Sprint 4. 7 outcome-framed achievements; blockers name Andres / Xitong+Daniel(AI squad) / Anna(legal) with the specific dependency and whether external action is needed; brief cleanly separated."
+# NOTE: both goldens PREDATE the no-em-dash house rule and use ' - ' rendered as an em dash for the
+# 'what's blocked - what help - from whom' separator and header. They calibrate the VOICE / DATA /
+# STRUCTURE checks (format-independent) and are EXPECTED to fail no_em_dashes_shared. A compliant
+# re-run swaps em dashes for a colon or ' - '. Recalibrate no_em_dashes_shared against the first
+# post-rule ops update once one exists.
+
+known_reject:
+  - "An update that lists Jira keys as achievements ('KM-13xxx moved to Done'), frames In-Progress / in-review tickets as shipped, states blockers vaguely ('waiting on some things') with no named owner and no ask, omits or buries the missed iOS sprint goal, states a KR target as settled fact with no Iren caveat, uses em dashes throughout the Confluence section, and pastes the Every.to brief into the Confluence body with no separator. Must fail achievements_outcome_framed, done_only_achievements, blockers_actionable, external_blockers_only, timeline_slips_surfaced, targets_flag_iren, no_em_dashes_shared, and everyto_brief_separated."
+
+checks:
+  # ---- ACHIEVEMENTS (voice + data — what shipped, framed as outcomes) ----
+  - id: achievements_outcome_framed
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Every achievement bullet reads as a user/business outcome ('Launched X so Y', 'Sian went live on Android with 200+ downloads'), not a ticket restatement, and carries no raw Jira key. KR/OKR tags are allowed and welcome."
+    rationale: "Skill Step 2 framing rules + common mistake 'listing ticket IDs in achievements'. Goldens tag KRs but keep keys out of the achievement line."
+
+  - id: done_only_achievements
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "Achievements contain only completed/shipped work. In-Progress or in-review tickets are not framed as achievements; if surfaced for context they are explicitly labelled in-flight (or, if Done=0, the update says so and lists in-flight items as context)."
+    rationale: "Skill Step 2 + common mistake 'including In Progress work as achievements'. The Done=0 fallback is spelled out in the spec."
+
+  - id: achievements_capped
+    type: structural
+    severity: normal
+    scope: format
+    statement: "The achievements section is at most 8 bullets, each roughly one line; smaller related items are grouped rather than listed separately."
+    rationale: "Skill Step 2 (max 8, group minor items) + common mistake 'writing more than 8 bullets'. Golden 20260518 lands exactly 8."
+
+  # ---- BLOCKERS (voice — honest, actionable asks) ----
+  - id: blockers_actionable
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Every blocker states the triad: what is blocked + what specific help is needed (a decision, access, a resource, a dependency) + from whom (named person or squad where known). No vague 'waiting on some things'."
+    rationale: "Skill Step 3 framing + common mistake 'vague blockers'. Goldens name Andres / Xitong+Daniel / Anna against each ask."
+
+  - id: external_blockers_only
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Blockers are items that genuinely need outside help or escalation, not issues the squad can resolve internally. If there are none, the update says so explicitly ('No external blockers this sprint') rather than leaving an empty section."
+    rationale: "Skill Step 3 + common mistake 'including squad-internal issues'. The explicit no-blockers line is required, not optional."
+
+  - id: timeline_slips_surfaced
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Any missed sprint goal, scope cut, or timeline slip is stated plainly (e.g. 'Sprint 4 closed without iOS going live') and paired with the deadline and what happens next, not buried inside an achievement bullet or omitted."
+    rationale: "Golden 20260518 leads its iOS blocker with the miss + the 2026-07-28 window. Honesty over a green wall; a slip that is hidden is the failure mode."
+
+  - id: quantified_where_possible
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Achievements and blocker impacts carry a real number, count, or date wherever the sensed data supports one (downloads, ticket counts, deadlines, % moves), rather than vague magnitude words."
+    rationale: "Goldens: '200+ downloads', '9 FE/BE tickets', '6 escort interviews', '12-week WAU window ends 2026-07-28'. Quantify where the data exists; do not invent to fill a gap (base grounded still governs)."
+
+  # ---- HOUSE RULES (data + format) ----
+  - id: targets_flag_iren
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "No numeric OKR/KR target is stated as a settled fact. Any target figure is marked 'needs Iren input' (or equivalent) until she confirms it. Actuals already observed (e.g. real download counts) are fine."
+    rationale: "Analyst rule (memory: Iren owns numeric targets). block-severity: a fabricated target reaching an ops audience is unrecoverable."
+
+  - id: no_em_dashes_shared
+    type: structural
+    severity: normal
+    scope: format
+    statement: "The Confluence (shared) section — header, achievements, and blockers — contains zero em dashes; use a colon or ' - ' for the blocker separator."
+    rationale: "House rule for shared output (em dashes are an AI tell); the ops update is pasted into Confluence. Base has no_em_dashes too; called out here because the skill's own template and both goldens still use em dashes as the separator (pre-rule) and must be cleaned on every new run."
+
+  - id: confluence_paste_clean
+    type: structural
+    severity: normal
+    scope: format
+    statement: "The Confluence section is plain bullet points under a 'Sprint [N] Update, ECRM squad, [date range]' header, with no markdown headers, tables, REVIEW flags, or raw [REQUIRES PO INPUT] placeholders."
+    rationale: "Skill Output Format ('no markdown headers, no tables, no REVIEW flags') + the Step 1 pre-flight that forbids shipping unfilled placeholders. Base grounded also blocks placeholders; this pins the paste-ready shape."
+
+  # ---- EVERY.TO BRIEF (PO-only appendix) ----
+  - id: everyto_brief_separated
+    type: structural
+    severity: normal
+    scope: format
+    statement: "The Every.to intelligence brief is appended after the '<!-- EVERY.TO BRIEF — NOT FOR CONFLUENCE -->' separator and is never mixed into the Confluence section. (This appendix is PO-only, so the no-em-dash rule does not apply to it.)"
+    rationale: "Skill Step 11 + Phase 2 quality check 'clearly separated from the Confluence section'. Leaking the brief into the Confluence paste is a concrete failure mode."
+
+  - id: everyto_bullets_grounded
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "In the brief, each 'applicable' bullet names a specific project, tool, or OKR and ends with a concrete suggestion; the 'suggested next action' is one specific sentence; every article URL is a real every.to link, not a fabricated or slug-guessed one."
+    rationale: "Skill Steps 9-10 + Phase 2 checks ('every applicable bullet names a specific project/tool/OKR', 'URLs came from the sitemap', 'read in full, not from slug'). Base grounded/traceable govern the URLs; this pins the brief's specificity."

@@ -1,0 +1,89 @@
+schema_version: 1
+extends: _base
+task: "Weekly Confluence sprint status report for the Growth Circle, drafted live from Jira (board 1847, the 6 mapped OKR epics) in Tomek's voice"
+calibration_target: "a Growth Circle stakeholder reading it in Confluence; Tomek fills the sanctioned handoff markers, then ships. Every count/key/verdict must be real and checkable, and no miss may be buried."
+created: 2026-07-06
+
+goldens:
+  - path: "01-sprint-operations/history/sprint-reports-20260518-1530.md"
+    note: "S2 E4/6 (closed sprint). Every ticket named by KM key + assignee + status; goal verdict GROUNDED ('✅ Marked achieved — KM-11955 closed Done'); Done count split honestly (21 raw / 14 substantive, meeting+tracking tickets excluded); 23 carry-over items listed per epic + 2 stale epics named (KM-10909, KM-12205); review-queue chokepoint stated as the miss; blockers tie to KM-10904/owners; OKR read lives in the downstream 'Active workstreams by OKR' summary. LEGACY caveat: contains em dashes (predates the house rule) and the spec-sanctioned [REQUIRES PO INPUT]/[PENDING] markers — calibrates velocity/goal/carryover/miss/data checks, NOT no_em_dashes."
+  - path: "01-sprint-operations/history/sprint-reports-20260513-1200.md"
+    note: "S4 mid-sprint. Per-epic KR tags ('O2: KR 2.4, 2.1'); 31 Done reported with an honest context note (28 were bulk Sprint-3 close-out, only 3 genuinely new S4) — velocity not spun; iOS App Store slip named as an explicit sprint-goal risk; KM-12205 baseline-ticket 'recoverable evidence lost each sprint' called out as a miss; blockers owned (Andres onboarding, Anna/Legal Sprig sign-off, KM-12477 needs owner). Same LEGACY em-dash caveat."
+
+known_reject:
+  - "A spin report: opens 'Solid sprint, ~20 tickets done, good velocity' with no KM ticket keys and no per-ticket breakdown; sprint goal marked '✅ achieved' with nothing cited behind it; no carry-over or stale-epic mention and every workstream painted 'on track'; no miss and no blocker section (or blockers written as 'need more dev support' with no owner); a KR asserted as '2.3 now at 620 WAU' with no Iren caveat. Must fail velocity_grounded, ticket_keys_referenced, sprint_goal_verdict, carryover_named, honest_miss, blockers_have_owners, and targets_flag_iren."
+
+checks:
+  # ---- DATA / GROUNDING (the hard gates specific to a sprint report) ----
+  - id: velocity_grounded
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "Completed and carried/committed counts are real tallies of Jira tickets (Query B Done + Query D in-flight), never asserted round numbers. If the raw Done count is inflated by meeting/admin/tracking tickets or prior-sprint close-out, a substantive count is broken out with a note. No velocity figure appears without the tickets behind it."
+    rationale: "Golden 1 splits '21 Done / 14 substantive'; golden 2 flags '31 Done but 28 were bulk S3 close-out, 3 genuinely new'. block-severity: invented velocity reaching GC is the unrecoverable failure."
+
+  - id: sprint_goal_verdict
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "The sprint goal is stated as real text (or the board link) — never a bare placeholder — and given an explicit met / missed / partial verdict that is grounded in a ticket or named evidence. A ✅/❌ with nothing cited behind it fails."
+    rationale: "SKILL.md: the goal is the first line stakeholders read, never leave [REQUIRES PO INPUT]. Golden 1: '✅ Marked achieved (KM-11955 closed Done)'; golden 2 states the goal and flags the mid-sprint iOS slip. block: an ungrounded verdict at the top of the report is spin."
+
+  - id: targets_flag_iren
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "No numeric OKR/KR target or achievement is stated as settled fact; any is marked 'needs Iren input' or deferred to the downstream okr-tracker phase. Iren owns the numbers."
+    rationale: "Analyst rule (memory: Iren owns numeric targets). block: a fabricated KR figure to GC is unrecoverable. Goldens leave OKR % to okr-tracker (PENDING marker), so they pass."
+
+  - id: sanctioned_placeholders_only
+    type: structural
+    severity: normal
+    scope: data
+    statement: "The only bracketed placeholders present are the spec-sanctioned handoff markers — [REQUIRES PO INPUT ...] for standup blockers/key decisions and [PENDING — data-analysis / okr-tracker] for the OKR Impact section. Every count, ticket key, name, date, and status elsewhere is a real sensed value, not a stand-in. Any other bracketed guess fails."
+    rationale: "Reconciles with base 'grounded': SKILL.md explicitly sanctions these two marker types as downstream handoffs (not invented data). Both goldens carry them by design; a report inventing a number inside those brackets would fail."
+
+  # ---- STRUCTURE ----
+  - id: ticket_keys_referenced
+    type: structural
+    severity: normal
+    scope: format
+    statement: "Every completed or in-flight ticket is named by its KM-XXXXX key with summary, assignee, and status/date. No sprint work is described in prose without a ticket key behind it."
+    rationale: "Both goldens render every item as 'KM-NNNNN — summary · assignee · status'. A count or claim with no keys cannot be checked against Jira."
+
+  - id: okr_tie_visible
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Each major workstream/epic is connected to the OKR/KR it serves — via a per-epic KR tag or an OKR-mapped workstream summary — so a reader sees goal coverage. (The 'OKR Impact' section left as PENDING downstream markers is intentional and is not a miss.)"
+    rationale: "Golden 2 tags each epic 'O2: KR 2.x'; golden 1 carries the OKR read in the 'Active workstreams by OKR' summary. Distinguishes the intentional downstream placeholders from a missing OKR link."
+
+  # ---- VOICE (Tomek's signal; a no-miss report reads as spin) ----
+  - id: honest_miss
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "At least one miss, slip, chokepoint, or thing-not-working is stated plainly, each with its consequence or the fix in flight. An all-green report with no miss reads as spin, not a good sprint."
+    rationale: "Tomek's signature honesty. Golden 1 leads the AI epic with 'nothing crossed the Done line' + the review-queue chokepoint; golden 2 names the iOS slip and the KM-12205 baseline evidence lost each sprint."
+
+  - id: carryover_named
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Carry-over and spillover are named openly — in-review/ready/in-progress work that did not cross Done is listed per epic and counted, and stale epics (zero Done, zero in-flight) are called out by name. Nothing incomplete is hidden by reporting Done only."
+    rationale: "SKILL.md 'Do not skip Query D' — in-progress work is a major part of the picture. Golden 1: '23 carrying over' + 'Stale epics: 2'; golden 2: KM-10909 stale, KM-12205 in Refinement all sprint."
+
+  - id: blockers_have_owners
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Each risk/blocker names who or what it waits on (person, squad, or upstream ticket) and the consequence if unresolved. Unowned 'need X' blockers fail; the sole permitted exception is the spec's [REQUIRES PO INPUT] marker for standup-only blockers."
+    rationale: "Goldens tie blockers to owners (Andres onboarding, Anna/Legal Sprig sign-off, upstream KM-10904) and keep the sanctioned PO-input marker for anything not visible in Jira."
+
+  # ---- FORMAT / HOUSE RULE (forward-enforced; legacy goldens predate it) ----
+  - id: no_em_dashes
+    type: structural
+    severity: normal
+    scope: format
+    statement: "The output contains zero em dashes (use ' - ', ':', or a rewrite). The report ships to Confluence/GC where em dashes are an AI tell."
+    rationale: "House rule (memory: no em dashes on shared output). Forward-enforced: the pre-2026-07 legacy goldens predate it and are NOT calibrated on this check — recalibrate against the first em-dash-clean report."

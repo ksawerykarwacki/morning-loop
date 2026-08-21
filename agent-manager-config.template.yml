@@ -1,0 +1,246 @@
+# Agent-Manager Routing Config — TEMPLATE (copy me, don't run me)
+# ---------------------------------------------------------------------------
+# This is the L2-reusable template behind /morning. To adopt the daily loop:
+#   1. Copy this file to  06-skills/skills/agent-manager-config.yml
+#   2. Fill every  <PLACEHOLDER>  and the FILL-ME blocks below with YOUR values.
+#   3. Read ADOPT-MORNING.md (same folder as this repo's agent-manager) for setup.
+# The /morning command logic is generic and reads THIS file — you never edit the
+# command, only your config. That copy-and-fill is the whole reusability bar.
+# Every place you see  # FILL:  is a decision only you can make about your role.
+# ---------------------------------------------------------------------------
+
+owner:
+  name: <YOUR NAME>
+  role: <YOUR ROLE e.g. Product Owner / Designer / Engineer>
+  squad: <YOUR SQUAD>
+  jira_cloud_id: 54c58828-ac60-4b04-acd4-9cb19aaea61e   # same Kaufmich cloud id for all of us
+  jira_project: KM
+  timezone: <YOUR TZ e.g. Europe/Warsaw, Asia/Singapore>   # FILL: the loop's day boundary =
+                                # YOUR morning, not CET midnight. Fixes "since last run" diffs.
+  jira_boards: [<YOUR BOARD IDS>]   # FILL: KM is shared across squads. The squad-scope guard
+                                # JQL-verifies every ticket against these before it reaches your
+                                # plan. Without this, other squads' tickets leak into your day.
+
+# ---------------------------------------------------------------------------
+# Your JTBD → jobs the loop can run for you.
+# BEFORE editing routing below, do a JTBD capture (run /jtbd-capture or read
+# jtbd-capture.md). List your recurring jobs, mark which have a skill, and which
+# are Assisted (you hand-trigger) vs could be Orchestrated (fire on a signal).
+# The routing table is literally "which of my JTBD fire on which day/signal".
+# Paste your JTBD summary here so the loop (and future-you) has the source:
+# ---------------------------------------------------------------------------
+jtbd_source: <path to your JTBD doc, e.g. 05-automation/agent-manager/jtbd-<you>.md>   # FILL
+
+# ---------------------------------------------------------------------------
+# Meeting notes source — where the loop reads meeting notes for the
+# `transcript_new` signal and the meeting-debrief drafter.
+# The SQUAD-UNIVERSAL DEFAULT is the shared Confluence folder Maria's pipeline
+# posts the squad's meeting notes into. It works on every client (Claude Code /
+# Cursor / OpenCode) and OS with no extra tool, because it reads through the
+# Atlassian MCP you already have. This is the reference implementation of the
+# pattern Xitong and Maria each built by hand — now folded into the template.
+# The loop diffs the folder against `processed_log` each run so a note is only
+# debriefed once. Nothing is fabricated if the folder is unreachable.
+# ---------------------------------------------------------------------------
+meeting_source:
+  type: confluence_folder                # confluence_folder (squad default) | granola (personal, optional) | local_dir
+  confluence_space: SPEC
+  confluence_parent_page_id: "5481365612"   # "E CRM Events & Meetings" — the squad notes folder
+  processed_log: "05-automation/agent-manager/processed-meetings.json"   # dedup: page ids already debriefed
+  # granola / local_dir adopters: set type accordingly; the loop keeps the same
+  # transcript_new contract regardless of source.
+
+# ---------------------------------------------------------------------------
+# Weekly calendar — the meetings that anchor YOUR week.
+# weekday: mon|tue|wed|thu|fri|sat|sun  · role: run|contribute|informed
+# prep_lead_days: days before to draft prep (0 = same morning)
+# Delete rows that aren't yours; add your own. These drive calendar-triggered jobs.
+# ---------------------------------------------------------------------------
+meetings:                                   # FILL: replace with YOUR meetings
+  - name: Daily standup
+    weekday: [mon, tue, wed, thu, fri]
+    time: "<HH:MM>"
+    role: run                               # or contribute
+    prep_lead_days: 0
+  # - name: <your recurring meeting>
+  #   weekday: [<day>]
+  #   role: <run|contribute>
+  #   prep_lead_days: <n>
+  #   sprint_phase: <start|end>             # optional gate
+
+sprint:
+  length_days: 14
+  anchor_start: "<YYYY-MM-DD>"              # FILL: a known sprint Monday for your squad
+  prefer_jira: true                          # use Jira openSprints() endDate at runtime
+
+# ---------------------------------------------------------------------------
+# Routing — the manager brain. Each rule maps a SIGNAL to a JOB.
+# signal: daily | calendar | sprint_event | transcript_new | metric_event | jira_state
+# bucket: draft (agent drafts, you review) | decision (agent gathers, you decide)
+#         | human (yours) | auto (read-only, gathered for you)
+# external_action: none | jira | confluence | mattermost  (NEVER auto-sent)
+# skill: the skill that drafts it (null = human judgment; agent can pre-structure)
+# ---------------------------------------------------------------------------
+# START SMALL. Keep only `daily_spine` + one or two jobs you actually do weekly.
+# Add rules as you trust the loop. Below is the PO set — adapt to YOUR skills.
+routing:
+  - id: daily_spine
+    signal: daily
+    job: "Standup prep + product pulse + Every.to digest"
+    skill: <standup | team-standup | daily-overview | your own sense tool>   # FILL
+    # `daily_spine` is a SLOT, not a product. Map it to whichever sense tool answers
+    # "what needs ME today" for your role. `/standup` is the PO default and is built
+    # around squad-toward-OKRs; a dev maps this to /team-standup, a POC/support role to
+    # their own daily-overview. Run ONE spine, not two in parallel.
+    bucket: auto
+    external_action: none
+
+  - id: routine_health
+    signal: daily
+    job: "Verify yesterday's + today's END deliverable landed; diagnose on a miss"
+    skill: null               # inline in Phase 2c — silent unless something is missing
+    bucket: decision
+    external_action: none
+    # Keep this if you have ANY scheduled pre-run. It is the difference between
+    # "my loop is running" and "I believe my loop is running".
+
+  - id: ceremony_capture
+    signal: transcript_new
+    job: "Write every sensed meeting to paths.meeting_notes_dir as a file"
+    skill: null               # inline in Phase 1 — the artifact IS the deliverable
+    bucket: auto
+    external_action: none
+    # Reasoning about a transcript inside a run and then discarding it does not count
+    # as captured. If the ceremony-capture KR matters to you, the file has to exist.
+
+  # --- EXAMPLES to adapt/delete (keep only jobs YOU have a skill for) ----------
+  # - id: meeting_prep
+  #   signal: calendar
+  #   job: "Prep brief for today's/tomorrow's meeting"
+  #   skill: standup
+  #   bucket: draft
+  #   external_action: none
+  #
+  # - id: meeting_debrief
+  #   signal: transcript_new           # fires when meeting_source has a note not yet in processed_log
+  #   job: "Debrief new meeting note -> decisions, actions, draft tickets"
+  #   skill: meeting-debrief
+  #   bucket: draft
+  #   external_action: jira
+  #
+  # - id: <your_weekly_report>       # e.g. a designer's design-review digest,
+  #   signal: calendar               # or a dev's PR/quality digest
+  #   job: "<what it produces>"
+  #   skill: <your skill>
+  #   bucket: draft
+  #   external_action: <none|confluence|mattermost>
+
+# ---------------------------------------------------------------------------
+# RUN -> DELIVER -> NOTIFY -> HEALTH — the four-part contract that makes the loop
+# PROACTIVE. Without this the loop only runs when you remember to run it, and a
+# plan file on a powered-off laptop helps nobody. Read RUN-AND-NOTIFY.md.
+# This is the single biggest change in v2 and the one every adopter should set up.
+# ---------------------------------------------------------------------------
+schedule:
+  enabled: true
+  substrate: <local_launchd | local_task_scheduler | cloud_routine>   # FILL: see below
+  time: "07:52"                     # off-:00/:30 on purpose
+  timezone: <YOUR TZ>               # FILL
+  weekdays: [mon, tue, wed, thu, fri]
+  # macOS -> local_launchd (scripts/run-prep.template.sh). Windows -> local_task_scheduler
+  # (ask Maria for run-prep.ps1; force UTF-8 logging, prefer Register-ScheduledTask).
+  # Cursor has no headless CLI, so Cursor adopters run `morning` interactively for now.
+  # HONEST CEILING: a local scheduler only fires when your machine is on. That is
+  # Assisted infrastructure, not unattended automation. Pair it with a cloud
+  # backstop + `health` below, or your misses will be silent.
+  backstop: <cloud_routine | none>   # FILL
+
+delivery:
+  # NOTHING TO SIGN UP FOR. That is the design requirement, learned the hard way:
+  # a delivery step that needs an account is a step most people never complete,
+  # and an undelivered brief is worth the same as no loop.
+  channel: macos                    # macos | mattermost | file
+  # macos       native notification + the brief opens as a local web page.
+  #             Zero setup. Works offline. Start here. (Windows adopters: see
+  #             the Windows note in RUN-AND-NOTIFY.md.)
+  # mattermost  ONE webhook URL pasted below. No account, no 2FA, no MCP, and we
+  #             all already live in Mattermost. This is the team-visible option.
+  # file        render the HTML and nothing else.
+  target: local                     # macos needs no target
+  content: full_brief
+  notifier_script: "05-automation/agent-manager/scripts/notify.py"
+  open_brief: true                  # uses `open -g`, so a 07:52 run never steals focus
+  assign_brief_id: true             # numbers each brief so "morning loop #21" works later
+  receipts_dir: "05-automation/agent-manager/delivery-receipts/"
+  brief_index: "05-automation/agent-manager/brief-index.json"
+  render_dir: "05-automation/agent-manager/briefs/"
+  # For mattermost, put the webhook in ~/.config/morning-loop/notify.env, NOT here
+  # (this file is committed; the webhook is a credential):
+  #   export MORNING_NOTIFY_CHANNEL=mattermost
+  #   export MORNING_MATTERMOST_WEBHOOK=https://mattermost.../hooks/xxxx
+
+notify:
+  channel: same_as_delivery         # the macos/mattermost channel IS the notification
+  include_top_item: true            # one line + the single most important item
+
+health:
+  enabled: true                     # leave this ON, especially on a local scheduler
+  check_deliverable: true           # confirm the brief LANDED, not that the send call returned
+  check_previous_run: true          # a working day with no run-log line is a SILENT MISS
+  alert_on_miss: same_as_delivery
+  # Why this matters: a two-stage routine can succeed on its first half while the real
+  # end deliverable never lands, so "did something run?" reports healthy. Check the END
+  # artifact. This check caught a briefing that had silently failed twice.
+
+# ---------------------------------------------------------------------------
+# Permission policy — the safety contract. DO NOT loosen these.
+# Sense + Plan + Deliver run unattended. Dispatch is gated at the morning gate.
+# Anything leaving the workspace is re-confirmed per item, even after approval.
+# ---------------------------------------------------------------------------
+permissions:
+  unattended_allowed: [read_meeting_transcripts, read_jira, read_confluence, read_amplitude, read_web, read_own_email, write_local_files, deliver_brief_to_self]
+  gated_at_morning_approval: [run_drafting_subagents]
+  never_auto: [create_or_edit_jira_issue, publish_or_edit_confluence, post_to_mattermost, send_any_external_message, reply_to_any_email]
+  # `deliver_brief_to_self` is the ONE narrow exception to send_any_external_message:
+  # already-sensed read-only output, to `delivery.target` only, brief content only.
+  # It decides nothing and tells nobody else. Anything addressed to another human
+  # stays gated. Do not widen this to "send email".
+
+quality:
+  bar: 7
+  max_revisions: 1
+  stricter_for_external: true      # external_action != none -> bar+1 AND two verifiers
+  rubric:
+    - grounded: "real sensed data; NO placeholder/TODO/untraceable number (auto-block)"
+    - correct: "every claim traces to Jira / Amplitude / transcript; no invented facts"
+    - complete: "covers what the named skill should produce"
+    - format: "matches the skill's expected structure"
+    - ready: "you could ship it as-is without a rewrite (the ship test)"
+  verifier_is_independent: true
+
+# ---------------------------------------------------------------------------
+# Feedback loop — how we improve the SHARED loop from your real use.
+# After `after_days` of your run-log having entries, /morning surfaces a one-time
+# "give feedback" prompt (the morning-feedback skill). It writes your feedback to
+# `collection_dir` and offers to send a summary to the owner of the shared loop.
+# This is opt-out: set enabled:false to silence it. Set your first_run once.
+# ---------------------------------------------------------------------------
+feedback:
+  enabled: true
+  first_run: "<YYYY-MM-DD>"        # FILL: set to the date you first run /morning (the loop can auto-stamp this)
+  after_days: 7                     # surface the feedback prompt this many days after first_run
+  reminder_every_days: 7            # if skipped, re-surface on this cadence until given
+  skill: morning-feedback
+  collection_dir: "05-automation/agent-manager/feedback/"   # one file per adopter per round
+  route_to: "Tomek Duda"           # who owns improving the shared loop; feedback summary goes here
+  route_channel: "KM Growth (Mattermost)"   # NEVER auto-posted — drafted, you confirm the send
+
+# ---------------------------------------------------------------------------
+# File locations — adjust the repo-relative paths if your workspace differs.
+# ---------------------------------------------------------------------------
+paths:
+  plan_file: "01-sprint-operations/current/morning-plan-{DATE}.md"
+  review_dir: "01-sprint-operations/current/agent-drafts/{DATE}/"
+  decision_queue: "01-sprint-operations/current/needs-decision-{DATE}.md"
+  run_log: "05-automation/agent-manager/run-log.md"
+  meeting_notes_dir: "10-meeting-notes/"    # ceremony_capture writes one file per sensed meeting

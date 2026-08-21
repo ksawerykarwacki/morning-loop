@@ -1,0 +1,11 @@
+# an adopter's own config never belongs in the shared package
+agent-manager-config.*.yml
+!agent-manager-config.template.yml
+!skills/agent-manager-config.template.yml
+!skills/agent-manager-config.engineer.yml
+# local run artefacts
+briefs/
+delivery-receipts/
+launchd*.log
+*.before-v3.1
+.DS_Store

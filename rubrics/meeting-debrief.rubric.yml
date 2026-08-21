@@ -1,0 +1,84 @@
+schema_version: 1
+extends: _base
+task: "Structured debrief of a meeting transcript/notes — decisions (owner/category/stakeholder-impact/confidence), action items (owner/category/deadline/source), open questions (with escalation path), and draft Jira tickets (user story + testable AC + prefix)"
+calibration_target: "Tomek can act on it as-is — assign the actions, log the decisions, and paste the create-ready tickets into Jira — with no re-derivation from the transcript"
+created: 2026-07-06
+
+goldens:
+  - path: "01-sprint-operations/current/agent-drafts/2026-07-03/reactivation-sprint2-ticketset.md"
+    note: "Exemplary TICKET output. Every draft ticket (NEW-1/2/3) carries a user-story-shaped description AND a testable AC checklist; each has prefix ([ANALYTICS/DATA], [EXPERIMENT], [OPS/CRM]), named owner (Cynthia+Iren, Tomek+Iren, Cynthia), estimate, sprint bucket, and explicit blocks/blocked-by. Decisions block (§F) records status (RESOLVED/open), owner, and what's still parked. Numeric metric definition is deferred to Iren. This is the create-ready bar for the SUBSTANTIVE checks (ticket_has_ac, action_item_actionable, decision/escalation, targets_flag_iren). NOTE: this file itself contains em dashes, so it does NOT calibrate no_em_dashes / format_conformant — that check is forward-enforced on new debrief output, same convention as the sibling rubrics' legacy goldens."
+  - path: "10-meeting-notes/2026-07-06-idea-engine-sync-cristina-ying.md"
+    note: "Exemplary DECISIONS + OPEN-QUESTIONS voice. Points-of-agreement read as owned decisions; 'Open questions and tensions' each name the tension AND who/what resolves it (degree of autonomy, shared state, centralisation, setup complexity); Next steps are owner-prefixed (Tomek / All three / Cristina) with concrete deliverables. Escalation to Ops (Katya/André) is explicit. Traces every claim to what was said in the room."
+
+known_reject:
+  - "A debrief that: lists action items as bare bullets with no owner and no deadline ('follow up on the email campaign'); records a 'decision' the transcript never contained (invented) with no owner or confidence; includes a draft ticket with a title and a Why but NO acceptance criteria yet labels it 'Ready for Creation'; states an OKR target as settled fact ('lift retention to 82%') with no Iren caveat; lists open questions with no escalation path; and uses em dashes throughout. Must fail action_item_actionable, decision_owner_confidence, ticket_has_ac (block), grounded/traceable (block), targets_flag_iren (block), open_question_escalation, and no_em_dashes."
+
+checks:
+  # ---- ACTION ITEMS ----
+  - id: action_item_actionable
+    type: binary_llm
+    severity: gate
+    scope: data
+    statement: "Every action item names a specific owner, a deadline or sprint bucket (Immediate / Current Sprint / Next Sprint / Backlog or a date), and a source-meeting citation. No unowned 'we should', no floating 'TBD' owner, no action without a when."
+    rationale: "The skill's action-item structure requires Owner + Category + Deadline + Source. An action with no owner or no when is not trackable — the whole point of the debrief is execution. Golden reactivation set assigns each NEW ticket an owner + sprint + deps; idea-engine next-steps are owner-prefixed."
+
+  # ---- DECISIONS ----
+  - id: decision_owner_confidence
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "Every recorded decision names its owner/decision-maker and a confidence level (Firm / Tentative / Needs Validation), and is a decision that was actually reached — not a topic that was merely discussed."
+    rationale: "Skill's decision-capture requires Owner + Confidence. Idea-engine golden separates settled 'points of agreement' from unresolved 'tensions'; a debrief that promotes discussion to decision is the classic over-claim."
+
+  - id: decision_escalation_flag
+    type: binary_llm
+    severity: gate
+    scope: data
+    statement: "Any decision that exceeds PO authority or touches a stakeholder gate carries the right flag — Growth Circle approval, legal/compliance review, Andre (data/technical), or Julius (business/resource). If a decision has such an implication and it is unflagged, that is a fail."
+    rationale: "Skill's stakeholder-specific decision flags (GC / Andre / Julius / Legal). Missing a required GC or legal escalation is how a debrief silently ships a decision past its approver — the reactivation golden flags legal FSK-18 constraints and GC launch/kill-criteria process explicitly."
+
+  # ---- OPEN QUESTIONS ----
+  - id: open_question_escalation
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "Every open question states who can resolve it (escalation path) and what is blocked/at risk until then. No question is left dangling with no owner-to-resolve."
+    rationale: "Skill's open-question structure requires an Escalation Path + Impact. Idea-engine golden's 'tensions to resolve' each name the resolver; a question with no path is just a note, not an open item."
+
+  # ---- DRAFT JIRA TICKETS ----
+  - id: ticket_has_ac
+    type: binary_llm
+    severity: block
+    scope: format
+    statement: "Any draft ticket presented as create-ready (Ready for Creation) has BOTH a user story (As a … I want … so that …) AND at least one concrete, testable acceptance criterion. A ticket missing AC must NOT be labelled create-ready — if AC is absent it must be marked Needs Clarification instead."
+    rationale: "block: a create-ready ticket with no AC is uncreatable and wastes a Jira slot / a dev's day. Skill's ticket structure mandates User Story + Acceptance Criteria; the reactivation golden's NEW-1/2/3 each ship a full testable AC checklist. Presenting no-AC as ready is an unrecoverable false-ready."
+
+  - id: ticket_prefix_and_story
+    type: structural
+    severity: normal
+    scope: format
+    statement: "Each draft ticket has a category prefix (FE / BE / RESEARCH / COMPLIANCE / SPIKE / EPIC / ANALYTICS / DESIGN / OPS or equivalent) in its title and a user-story line, and its Why cites the meeting source that triggered it."
+    rationale: "Skill's ticket categories + enhanced structure (prefix, user story, Meeting Source). Golden titles all carry bracketed prefixes and trace to the meeting/OKR."
+
+  # ---- GROUNDING (debrief-specific, on top of base grounded/traceable) ----
+  - id: no_invented_content
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "Every decision, action, question, and ticket traces to something actually present in the transcript/notes. Nothing is invented, no participant is quoted saying something they didn't, no decision is manufactured to fill a section. If the meeting produced no decisions, the decisions section says so rather than inventing one."
+    rationale: "block: an invented decision or fabricated quote reaching the decision log is the one unrecoverable debrief failure. Extends base grounded/traceable to the debrief's specific artifacts (decisions/actions/quotes). Idea-engine golden never asserts beyond the room."
+
+  # ---- HOUSE RULES ----
+  - id: targets_flag_iren
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "No numeric OKR/metric target extracted into a decision, action, or ticket is stated as settled fact — any is marked 'needs Iren input' (or equivalent) until she confirms. Defining a success metric is fine; asserting its number is not."
+    rationale: "block: the analyst rule (Iren owns numeric targets). Golden KM-13402/NEW-2 define the metric but defer the actual numbers/sample size to Iren rather than stating a target."
+
+  - id: no_em_dashes
+    type: structural
+    severity: normal
+    scope: format
+    statement: "The output contains zero em dashes — including inside draft tickets and stakeholder-update snippets, which get pasted into Jira / shared."
+    rationale: "House rule; debrief output feeds Jira tickets and stakeholder comms that get shared, and em dashes are an AI tell. (Base has this; called out because ticket/comms fragments ship externally.)"

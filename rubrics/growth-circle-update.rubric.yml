@@ -1,0 +1,131 @@
+schema_version: 1
+extends: _base
+task: "Weekly Growth Circle update in Tomek's voice — Squad Leader Forum fields + milestone table (primary), or legacy plain-text (reference)"
+calibration_target: "a Growth Circle stakeholder (Andre / squad leads), ship-as-is before Thursday; must read as Tomek wrote it"
+created: 2026-07-06
+
+goldens:
+  - path: "02-stakeholder-comms/updates/growth-circle-update-2026-06-25.md"
+    note: "Legacy format. Exemplary VOICE: opens on the Quick Check miss with the fix-in-flight (launch-readiness checklist); every claim quantified (4,200 responses, ~36.7%->31.7% W1); named asks (Iren root-cause, Cynthia KM-13346, David spike); OKR-tied with covered/thin/at-risk calls; standing legal blocker line."
+  - path: "02-stakeholder-comms/updates/growth-circle-update-2026-05-21.md"
+    note: "Legacy format. Honest miss led (Onboarding Checklist treatment lost to control) + regroup plan; precise experiment status (staging vs production-behind-flag); legal iOS text as standing blocker with 'committed turnaround date' ask."
+# NOTE: both goldens are LEGACY format (the only exemplars that exist). They calibrate the VOICE checks,
+# which are format-independent. The FORMAT checks below target the Squad Leader Forum (now primary, Jul 2026);
+# recalibrate them against the first strong SLF-format update once one exists.
+
+known_reject:
+  - "A green-wall update: milestone table all 🟢, no 'what's not working' section, claims like 'onboarding progressing well' and 'experiments running', asks written as 'need design support' with no named owner, an OKR target stated as fact with no Iren caveat, and em dashes throughout. Must fail honest_miss_present, quantified_claims, named_asks, targets_flag_iren, no_em_dashes, and milestone_status_honest."
+
+checks:
+  # ---- VOICE (format-independent — the durable signal the goldens teach) ----
+  - id: honest_miss_present
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "There is a plainly-stated miss or thing-not-working, each paired with the fix in flight. An update with no miss is a red flag, not a good week."
+    rationale: "Tomek's signature move (voice #1/#2). Both goldens open on the miss; the skill flags a miss-free update as spin."
+
+  - id: quantified_claims
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Every progress/impact claim carries a real number or a precise status. No vague 'progressing well', 'ongoing', 'good traction'."
+    rationale: "voice #3. Goldens: '4,200 responses', '169 downloads', '36.7% to 31.7%'. Vague phrasing is a listed common mistake."
+
+  - id: named_asks
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Every dependency/ask is addressed to a named person or squad with the specific thing needed and why now — not an unowned 'need X'."
+    rationale: "voice #4 + blocker-clarity. Goldens name Iren/Cynthia/David/Mathieu against each ask."
+    note: "AMBIGUITY found by pair 1: the 08-05 draft carried NO room-ask at all and Tomek re-added it when posting. Confirm this check FAILS an empty ask section rather than treating 'no asks present' as vacuously passing."
+
+  # ---- STRUCTURE (added from evidence, not belief — see evals/ pair 1) ----
+  - id: matches_target_structure
+    type: structural
+    severity: block
+    scope: format
+    statement: "Any table or field the update contributes mirrors the structure ALREADY USED on the destination page. Column headers, order and count must match the page's existing schema. Inventing a different shape is a fail, even if the invented shape is better."
+    rationale: >
+      Added 2026-08-10 from the first draft-vs-posted pair, which is the only check in this
+      file derived from measured evidence rather than a priori belief. The 08-05 draft shipped an
+      invented 3-column pipeline table ("Experiment / State / Next gate") into a page whose standard
+      schema is 5 columns ("Experiment / KPI / Expected lift / Launch status / Signal window"), used
+      by every other squad on that same page. Result: the prose shipped ~86% verbatim while the table
+      was rebuilt by hand, and the wrong schema CASCADED into a data gap, because a table with no KPI
+      column never prompted anyone to go and retrieve the KPI targets. Two of those targets were
+      sitting in the OKR file and on the ticket. block-severity: a wrong-shaped table guarantees
+      manual rework, which is exactly what this loop exists to remove.
+    how_to_check: "Fetch the destination page. Compare the drafted table's headers against the same table type already on that page. Any mismatch in header text, count or order = fail."
+
+  - id: targets_retrieved_before_tbd
+    type: binary_llm
+    severity: normal
+    scope: grounding
+    statement: "Every KPI/target cell is either a real figure traced to a source (OKR file, ticket, experiment object) or explicitly 'TBD' because no target exists yet. A blank or a TBD that could have been retrieved is a fail."
+    rationale: >
+      Same pair. 'TBD' is honest when no target exists (Quick Check, First Message Helper) and lazy
+      when the number is in okrs-q3-2026.md (reactivation's 3,000-in-14-days is KR 2.4) or on the
+      ticket (intent-driven signup's 2.17% to 2.55%). Check the sources before writing TBD.
+
+  - id: okr_tied
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Progress maps to specific objectives/KRs (O1/O2/O3 + KR), each with a covered / thin / at-risk / on-track call and % where known."
+    rationale: "voice #5. Golden: 'O2 KR2.1 at risk and uncovered', 'O1 thin'. This is the goal-coverage read GC exists for."
+
+  - id: experiment_status_precise
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Experiment/feature states use precise terms — live / in review / in staging / launching tomorrow / behind feature flag — never blurred into 'in progress'."
+    rationale: "voice #7. Golden distinguishes 'live', 'in review', 'staging testing', 'behind a feature flag'."
+
+  - id: legal_blocker_line
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "If any legal/compliance item is open, it appears as a specific ask with the named blocker and who is waiting. (Skip only if genuinely nothing legal is pending.)"
+    rationale: "voice #8 — legal is a near-standing blocker line. Goldens carry the iOS-texts / Kaleo / Granola asks explicitly."
+
+  - id: targets_flag_iren
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "No numeric OKR target is stated as settled fact — any is marked 'needs Iren input' (or equivalent) until she confirms."
+    rationale: "The analyst rule (memory: Iren owns numeric targets). block-severity: a fabricated target reaching GC is unrecoverable."
+
+  - id: no_em_dashes
+    type: structural
+    severity: normal
+    scope: format
+    statement: "The output contains zero em dashes."
+    rationale: "House rule; this artifact is shared, and em dashes are an AI tell. (Base has this too; called out because GC output ships externally.)"
+
+  # ---- FORMAT (Squad Leader Forum = current primary; recalibrate when an SLF golden exists) ----
+  - id: slf_fields_terse
+    type: binary_llm
+    severity: normal
+    scope: format
+    statement: "In Squad Leader Forum format, the written fields (Early signal / What's not working / What I need) are terse and signal-dense; the narrative lives in the Loom, not in long bullet dumps. (N/A if the update is deliberately in legacy long-form.)"
+    rationale: "Listed common mistake: 'don't write the SLF fields as long bullet dumps'. The Loom carries the color."
+
+  - id: pipeline_emitted_as_deltas
+    type: structural
+    severity: block
+    scope: format
+    statement: "Experiment-pipeline output is row-level CHANGE / ADD / NO CHANGE deltas against the live table, each quoting the current cell value before the arrow. A rebuilt or replacement table is a fail. Writing a placeholder such as 'not re-verified this week' over a cell that already has content is a fail."
+    rationale: >
+      Replaces milestone_status_honest, which was retired 2026-08-19: the ECRM section on the
+      destination page has NO milestone table (verified live), so that check had been n/a on every
+      run since the format changed and was measuring something that does not exist.
+      This check is derived from two measured pairs rather than from belief. Pair 1 (2026-08-06):
+      the drafted table used an invented 3-column schema and was 100% rebuilt by hand. Pair 2
+      (2026-08-20): the drafted table used the CORRECT 5-column schema, verified against the live
+      page, and was still 100% unused, because Tomek amends the existing table in place rather than
+      replacing it. Two consecutive pairs, two different causes, same wasted output. Structure
+      conformance was necessary and not sufficient; the form of the work was wrong.
+      block-severity because a replacement table guarantees manual rework, which is what this loop
+      exists to remove, and because blanking a populated cell destroys information the page had.
+    how_to_check: "Fetch the destination page's pipeline table. Confirm the draft emits deltas, not rows. Every CHANGE must quote the live cell value it is changing. Unchanged rows must be listed under NO CHANGE rather than omitted."

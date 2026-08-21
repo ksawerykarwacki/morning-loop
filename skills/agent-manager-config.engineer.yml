@@ -1,0 +1,181 @@
+# Agent-Manager Config: ENGINEER PROFILE
+# ---------------------------------------------------------------------------
+# Copy this instead of the generic template if you write code. It is pre-routed
+# for engineering work, so adoption is: fill the 5 fields marked FILL, run it.
+#
+# Why this exists: three developers adopted v1 and the package shipped ZERO
+# drafters that served them, so one of them had to write his own. That was the
+# single biggest gap in the whole adoption round. This profile is the fix.
+#
+# What it does NOT include, deliberately: growth-circle-update, sprint-report,
+# okr-tracker, ops-update, stakeholder-comms. Those are PO/lead outputs. You
+# would spend your first week wondering which of them you were supposed to run.
+# ---------------------------------------------------------------------------
+
+owner:
+  name: <YOUR NAME>                    # FILL
+  role: <Backend | Frontend | Full-stack | Mobile>   # FILL
+  squad: E CRM
+  jira_cloud_id: 54c58828-ac60-4b04-acd4-9cb19aaea61e
+  jira_project: KM
+  jira_boards: [1847, 1946]            # KM is shared across squads; this scopes you
+  timezone: <YOUR TZ>                  # FILL, e.g. Asia/Shanghai. Your morning, not CET.
+  repos: [<your repos>]                # FILL, e.g. [v2-fe, kaufmich2, app-rn-vc]
+
+# ---------------------------------------------------------------------------
+# Sense phase. `/team-standup` is the dev spine: YOUR tickets, YOUR focus order.
+# Do NOT use `/standup`. That is the PO spine and answers "what should the squad
+# ship toward OKRs", which is not your question in the morning.
+# ---------------------------------------------------------------------------
+daily_spine: team-standup
+
+meetings:
+  - name: Daily standup
+    weekday: [mon, tue, wed, thu, fri]
+    time: "<HH:MM>"                    # FILL
+    role: attend
+    prep_lead_days: 0
+  - name: Backlog refinement
+    weekday: [wed]
+    role: attend
+    prep_lead_days: 1                  # ticket-quality-check runs the day before
+
+sprint:
+  length_days: 14
+  anchor_start: "2026-08-03"
+  prefer_jira: true
+
+# ---------------------------------------------------------------------------
+# Routing. Start with these four. Add nothing until they have earned their place.
+# Every rule here produces something you would otherwise write or chase by hand.
+# ---------------------------------------------------------------------------
+routing:
+  - id: daily_spine
+    signal: daily
+    job: "My tickets, focus order, and what moved overnight"
+    skill: team-standup
+    bucket: auto
+    external_action: none
+
+  - id: ticket_brief
+    signal: jira_state                 # ticket newly In Progress, or yours and stalled 3+ days
+    job: "Implementation kickoff brief: what I'm building, what's already decided, what isn't"
+    skill: ticket-brief
+    bucket: draft
+    external_action: none
+    # The decisions section is the time-saver. Decisions get made in meetings you
+    # attended weeks ago and then get rediscovered by reading code.
+
+  - id: ticket_quality_check
+    signal: jira_state                 # + calendar, the day before refinement
+    job: "Is this ticket actually ready to build? AC, scope, deps, instrumentation, design"
+    skill: ticket-quality-check
+    bucket: draft
+    external_action: none
+    # Never fills a gap it finds. Surfaces it as a question with a name attached.
+
+  - id: stall_escalation
+    signal: jira_state
+    job: "Turn my stalled tickets into a named question or a mechanical next step"
+    skill: stall-escalation
+    bucket: draft
+    external_action: none
+    # Stall DETECTION was the one thing every engineer said worked. Stall
+    # REPORTING is what made a ticket sit in Ready for release for 154 days.
+    # This closes them instead of counting them.
+
+  - id: routine_health
+    signal: daily
+    job: "Verify yesterday's + today's brief actually landed; diagnose on a miss"
+    skill: null
+    bucket: decision
+    external_action: none
+
+# Proposed next, once the four above are earning their keep. Both were asked for
+# by name and neither is built yet, so they are listed rather than pretended:
+#   - pr_description   draft the PR description from the diff + the ticket
+#   - test_scaffold    generate the test skeleton for the ticket's AC
+# If you want one, say so in the feedback round; demand decides build order.
+
+# ---------------------------------------------------------------------------
+# Meeting notes: read from the shared Confluence folder. Works on every client
+# and OS through the Atlassian MCP, and needs no personal transcription tool.
+# ---------------------------------------------------------------------------
+meeting_source:
+  type: confluence_folder
+  confluence_space: SPEC
+  confluence_parent_page_id: "5481365612"
+  processed_log: "05-automation/agent-manager/processed-meetings.json"
+
+# ---------------------------------------------------------------------------
+# The Decision Log explains WHY things are as they are; the loop detects WHAT
+# changed. Check it before escalating any anomaly. Skipping this check produced a
+# false alarm that ran for four days: two Amplitude events went dark, the loop
+# called it broken instrumentation, and the log recorded that the team had
+# deliberately withdrawn them.
+# ---------------------------------------------------------------------------
+decision_log:
+  source: confluence
+  space: SPEC
+  current_page_id: "5912232035"        # update at sprint start
+  check_before_escalating: true
+
+# ---------------------------------------------------------------------------
+# Delivery. Zero setup: a native notification plus the brief as a local page.
+# Not on a Mac, or want it on your phone? Set channel to mattermost and put a
+# webhook in ~/.config/morning-loop/notify.env. See scripts/SETUP-DELIVERY.md.
+# ---------------------------------------------------------------------------
+schedule:
+  enabled: true
+  substrate: <local_launchd | local_task_scheduler>   # FILL
+  time: "07:52"
+  timezone: <YOUR TZ>                  # FILL
+  weekdays: [mon, tue, wed, thu, fri]
+
+delivery:
+  channel: macos                       # macos | mattermost | file
+  target: local
+  content: full_brief
+  notifier_script: "05-automation/agent-manager/scripts/notify.py"
+  open_brief: true
+  assign_brief_id: true                # so "morning loop #21" works in your terminal later
+
+notify:
+  channel: same_as_delivery
+  include_top_item: true
+
+health:
+  enabled: true
+  check_deliverable: true
+  check_previous_run: true
+  alert_on_miss: same_as_delivery
+
+# ---------------------------------------------------------------------------
+# Permissions. Do not loosen these. Sense, plan and deliver run unattended;
+# drafting is gated at the morning gate; nothing reaches Jira without a per-item
+# yes, even after you approve the gate.
+# ---------------------------------------------------------------------------
+permissions:
+  unattended_allowed: [read_jira, read_confluence, read_meeting_transcripts, read_web, write_local_files, deliver_brief_to_self]
+  gated_at_morning_approval: [run_drafting_subagents]
+  never_auto: [create_or_edit_jira_issue, publish_or_edit_confluence, post_to_mattermost, send_any_external_message]
+
+quality:
+  grading: per_check
+  max_revisions: 1
+  stricter_for_external: true
+  verifier_is_independent: true
+
+feedback:
+  enabled: true
+  after_days: 7
+  skill: morning-feedback
+  collection_dir: "05-automation/agent-manager/feedback/"
+  route_to: "Tomek Duda"
+
+paths:
+  plan_file: "01-sprint-operations/current/morning-plan-{DATE}.md"
+  review_dir: "01-sprint-operations/current/agent-drafts/{DATE}/"
+  run_log: "05-automation/agent-manager/run-log.md"
+  meeting_notes_dir: "10-meeting-notes/"
+  brief_index: "05-automation/agent-manager/brief-index.json"

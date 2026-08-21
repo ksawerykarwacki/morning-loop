@@ -1,0 +1,41 @@
+schema_version: 1
+task: "any morning-loop drafter output"
+calibration_target: "Tomek could use/ship/share it as-is, no rewrite (the ship test)"
+created: 2026-07-06
+# The universal checks every drafter inherits. These are the former flat `quality.rubric`,
+# restructured as typed, per-check-gradeable checks. Skill rubrics add job-specific checks on top.
+checks:
+  - id: grounded
+    type: structural
+    severity: block
+    scope: data
+    statement: "No invented or guessed value presented as real. Every figure/name/date/status is either a real sensed value OR an explicitly-labelled gap marker (e.g. [REQUIRES PO INPUT], [PENDING — downstream], [REVIEW: reason], 'needs Iren input'). An UNLABELLED placeholder, a bare TODO, a bracketed guess, or a fabricated number passed off as fact is a hard block; a clearly-labelled gap is an honest handoff and passes."
+    rationale: "Was the auto-block in quality.rubric. A single invented fact reaching a stakeholder is the one unrecoverable failure. Refined 2026-07-06 after skill rubrics (sprint-report, okr-tracker, stakeholder-comms) surfaced legitimate sanctioned markers: distinguish an honest labelled gap from a value faked as real."
+
+  - id: traceable
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "Every claim traces to a named source the reader could check — Jira ticket, Amplitude read, transcript, or the commitments ledger. No assertion floats free."
+    rationale: "quality.rubric 'correct'. Grounding + traceability are the two hard gates; everything else is revisable."
+
+  - id: complete
+    type: structural
+    severity: normal
+    scope: format
+    statement: "Every section the named skill's output format requires is present and non-empty; nothing the template calls for is silently dropped."
+    rationale: "quality.rubric 'complete'."
+
+  - id: format_conformant
+    type: structural
+    severity: normal
+    scope: format
+    statement: "Matches the skill's expected output structure and house rules — including NO em dashes on any artifact that gets shared."
+    rationale: "quality.rubric 'format' + the no-em-dash house rule (shared artifacts are an AI tell)."
+
+  - id: ready_to_ship
+    type: binary_llm
+    severity: gate
+    scope: voice
+    statement: "A stakeholder could receive this as-is with no rewrite. It reads as Tomek wrote it, not as a template that was filled in."
+    rationale: "quality.rubric 'ready' — the ship test. This is the READY gate the whole loop optimizes for."

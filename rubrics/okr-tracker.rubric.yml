@@ -1,0 +1,94 @@
+schema_version: 1
+extends: _base
+task: "Weekly OKR progress report for the Escort CRM & CAI squad in two formats — squad review (detailed, per-KR % + status + ticket references) and steering committee (outcome-focused, KR % + confidence)"
+calibration_target: "a squad-review audience (detailed format) and a steering-committee stakeholder (outcome format), ship-as-is; every KR call must be defensible against Jira/Amplitude evidence and reconcilable with Oboard"
+created: 2026-07-06
+
+goldens:
+  - path: "09-archive/okr-progress-report-20260514.md"
+    note: "Squad-review format. Exemplary: every KR carries a % (or explicit '[REQUIRES PO INPUT]' for the unvalidated KR 2.4 count) + a 🟢/🟡/🔴 status; per-KR blocks tie progress to real ticket keys (KM-12475, KM-12015, KM-10905); metric values sourced to Amplitude (WAU 176) not asserted; honest mix of at-risk/off-track with named blockers (P3 unidentified, iOS rejected) — no green wall; stale KRs surfaced in their own table; season-pace baseline stated; Oboard reconciliation reminder in the footer."
+  - path: "01-sprint-operations/okr-progress-log.md"
+    note: "Append-snapshot golden. Every entry gives each of the 8 KRs a % + status + a 'key change since last entry' that names the tickets driving the move; status honestly regresses and holds (🔴 Off track carried for KR 1.1/1.2/2.2 across sprints); revised-down entries show numbers corrected against real Jira reads rather than inflated. Calibrates status-honesty and progress-mapped-to-KR over time."
+# NOTE: both goldens predate the no-em-dash house rule and contain em dashes. They calibrate the SUBSTANTIVE
+# checks (targets_progress_flag_iren, kr_percent_and_confidence, kr_coverage_call, no_green_wall,
+# stale_krs_surfaced, squad_ticket_references, oboard_reminder), which are what makes them golden.
+# no_em_dashes and format_conformant apply to NEW output — a fresh run must strip em dashes even though
+# these legacy exemplars carry them. Fix the run, not the check.
+
+known_reject:
+  - "A green-wall steering update: all 8 KRs 🟢 with round percentages (KR 1.1 80%, KR 2.3 90%) stated as fact with no evidence trail and no 'needs Iren input' caveat; no confidence/status column or every KR marked 'on track'; the 'sprint highlight' cells list activity ('lots of tickets closed', 'team working hard') instead of outcomes; no risks section, no stale-KR flag, no Oboard reminder; em dashes throughout. Must fail targets_progress_flag_iren, kr_percent_and_confidence, kr_coverage_call, no_green_wall, stale_krs_surfaced, steering_outcome_focused, oboard_reminder, and no_em_dashes."
+  - "A squad report where per-KR blocks assert progress ('KR 2.1 is at 60%') with no KM-ticket references backing the number. Must fail squad_ticket_references and (base) traceable."
+
+checks:
+  # ---- DATA / house rule (the hard gate this skill exists to protect) ----
+  - id: targets_progress_flag_iren
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "No numeric OKR/KR target and no numeric progress figure is presented as a confirmed, settled measurement unless it cites a real measured source (an Amplitude or Jira read). Any target or progress number that is not a confirmed measured value is flagged 'needs Iren input' (or the skill's '[REQUIRES PO INPUT]' equivalent). Ticket-completion percentages are acceptable only when the per-KR evidence makes them derivable, never as bare asserted numbers."
+    rationale: "Standing house rule (memory: Iren is the data analyst and owns the numbers). block-severity: an unconfirmed target/percentage stated as fact reaching a steering committee is unrecoverable. Golden passes — WAU 176 is Amplitude-sourced, KR 2.4 count is flagged [REQUIRES PO INPUT], and every % is backed by ticket evidence."
+
+  # ---- VOICE (format-independent — the durable KR-tracking signal) ----
+  - id: kr_percent_and_confidence
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Every KR carries both a completion figure (a % or an explicit unvalidated marker like '--' / '[REQUIRES PO INPUT]') and a confidence/status level (🟢 on track / 🟡 at risk / 🔴 off track). No KR is left with a number but no status, or a status but no number."
+    rationale: "The skill's core output contract (Step 5 progress bars + status badges; steering template's '% | Status'). Golden gives all 8 KRs both; the unvalidated KR 2.4 shows the correct way to leave a % blank without dropping the confidence call."
+
+  - id: progress_mapped_to_krs
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Sprint work and metric movement are attributed to specific KRs, not left floating. Each contribution names which KR(s) it advances; no 'stuff got done this sprint' that is not tied to a KR."
+    rationale: "The report's whole job is goal-coverage. Golden's Sprint Contributions table maps every ticket to a KR; the log's 'key change' lines name the KR each move affects."
+
+  - id: kr_coverage_call
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Each KR gets an explicit coverage/trajectory judgement — on-track / at-risk / off-track (or covered / thin / at-risk) — assessed against the season-pace baseline, not just a raw percentage left for the reader to interpret."
+    rationale: "voice — the read a reviewer actually needs. Golden calls KR 1.2 and KR 2.2 off-track, KR 2.1 as the KR with most momentum, against the stated 54% season pace."
+
+  - id: no_green_wall
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "At-risk, off-track, and uncovered KRs are stated plainly with the real blocker, each paired with a recommended action. An all-green report with no risks section is a red flag, not a good season."
+    rationale: "Anti-spin, mirrors the GC rubric. Golden leads with off-track KRs and named structural gaps (P3 unidentified, iOS Apple rejection, playbook empty); the known_reject green wall is exactly what this catches."
+
+  - id: stale_krs_surfaced
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "KRs with no ticket moved to Done under their mapped epics in the last 28 days are flagged as stale (with last-activity date), except epics that are legitimately sequentially blocked, which are labelled as such rather than hidden or painted as progressing."
+    rationale: "Skill Step 4 staleness detection. Golden carries a dedicated Stale KRs table and distinguishes 'sequentially blocked' (KM-10904/10909) from genuinely stale — the log tracks stale KRs every period."
+
+  # ---- FORMAT (tied to the two current output formats) ----
+  - id: squad_ticket_references
+    type: binary_llm
+    severity: normal
+    scope: format
+    statement: "In the squad-review (detailed) format, per-KR progress and sprint contributions carry real KM-XXXXX ticket references as evidence. A KR percentage with no ticket backing it is not acceptable in this format."
+    rationale: "The squad format's distinguishing feature (SKILL Output Format A). Golden's per-KR blocks and contribution tables cite specific keys (KM-12475, KM-12015, KM-10905). Backs the traceable base check for this format."
+
+  - id: steering_outcome_focused
+    type: binary_llm
+    severity: normal
+    scope: format
+    statement: "In the steering-committee format, each KR line is outcome-focused — % + status + a one-line highlight of what moved or 'no activity' — not an activity dump of individual tickets or task lists. Detail and ticket keys stay in the squad format."
+    rationale: "SKILL Output Format B is deliberately outcome-oriented for stakeholders; the known_reject 'sprint highlight lists activity' is the failure mode. Steering readers want KR movement, not a task log."
+
+  - id: oboard_reminder
+    type: structural
+    severity: normal
+    scope: format
+    statement: "The output includes the Oboard reconciliation reminder before any external sharing — Oboard is the system of record and generated percentages may differ."
+    rationale: "Mandated by the skill (Oboard Verification section + validation checklist). Golden footer carries the reminder; omitting it risks a report diverging silently from the stakeholder-visible source of truth."
+
+  - id: no_em_dashes
+    type: structural
+    severity: normal
+    scope: format
+    statement: "The output contains zero em dashes."
+    rationale: "House rule; OKR reports are shared to squad and steering, and em dashes are an AI tell. (Base carries this too; called out because both output formats get shared.)"
