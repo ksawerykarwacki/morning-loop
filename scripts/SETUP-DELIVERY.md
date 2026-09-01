@@ -66,6 +66,60 @@ Turn on mobile notifications for that channel and the brief reaches your phone w
 
 ---
 
+## Scheduling the run (macOS)
+
+Delivery is only half of it. Until the pre-run fires on a schedule, the loop is
+Assisted infrastructure — you trigger it, so it is not automation and it does not
+count toward the day-count criterion.
+
+This package described the schedule everywhere and never shipped the thing that
+creates it. `scripts/com.morning-loop.prep.plist.template` is that piece.
+
+```sh
+# 1. configure your runner (Claude Code users: run-prep.template.sh)
+cp scripts/run-prep.opencode.template.sh scripts/run-prep.opencode.sh
+$EDITOR scripts/run-prep.opencode.sh          # set WORKDIR to your clone
+
+# 2. fill the plist — absolute paths only, there is no ~ expansion in a plist
+sed -e "s|__RUN_PREP_PATH__|$PWD/scripts/run-prep.opencode.sh|" \
+    -e "s|__LOG_PATH__|$PWD/briefs/launchd.log|" \
+    scripts/com.morning-loop.prep.plist.template > com.morning-loop.prep.plist
+plutil -lint com.morning-loop.prep.plist       # do not proceed unless this says OK
+
+# 3. do ONE supervised run before handing it to launchd
+zsh scripts/run-prep.opencode.sh; echo "exit $?"
+cat briefs/launchd.log
+
+# 4. only then, schedule it
+cp com.morning-loop.prep.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.morning-loop.prep.plist
+launchctl list | grep -i morning               # expect EXACTLY one entry
+```
+
+Step 3 is not optional. The first three scheduled runs in this package's own
+history failed for reasons a supervised run would have surfaced in seconds: a
+DarkWake sleep, an expired login, and a watchdog that fired with nothing verified.
+A scheduler is a bad place to discover your runner does not work.
+
+Four things that bite:
+
+- **`StartCalendarInterval` fires in the machine's local time**, not the timezone
+  in your config. If they disagree, the config is the one that is wrong.
+- **Two entries means two runs racing.** If you migrated from an older workspace
+  path, `launchctl bootout` the old label before loading this one.
+- **Keep `caffeinate -i -w $$`.** A launchd wake is a DarkWake, worth roughly 45
+  seconds before macOS sleeps again and kills the run mid-flight.
+- **The laptop must be on.** launchd is a local substrate; it fires when your
+  machine is awake and not otherwise. `routine_health` is mandatory with it,
+  because this is exactly the substrate that fails silently.
+
+Remove it with `launchctl bootout gui/$UID/com.morning-loop.prep`.
+
+**Windows / Linux:** use Task Scheduler or cron against the same runner; the
+delivery safety net and receipts below are platform-independent.
+
+---
+
 ## Verifying it keeps working
 
 Every delivery writes `05-automation/agent-manager/delivery-receipts/{date}.json`, on success **and** on failure:
