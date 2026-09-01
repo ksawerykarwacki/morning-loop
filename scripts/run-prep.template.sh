@@ -10,6 +10,13 @@ WORKDIR="<PATH TO YOUR REPO>"   # FILL
 LOG="$WORKDIR/05-automation/agent-manager/launchd.log"
 cd "$WORKDIR" || { echo "$(date) FAILED cd $WORKDIR" >> "$LOG"; exit 1; }
 
+# Hold the machine awake for the whole run. A launchd DarkWake gives roughly 45
+# seconds before macOS returns to sleep and kills everything: on 2026-08-20 the
+# run fired at 08:01:04 and the machine slept at 08:01:49, producing nothing and
+# reporting nothing until the lid opened. -w ties the assertion to this script's
+# pid, so it retires on its own without needing cleanup on every exit path.
+caffeinate -i -w $$ &
+
 echo "===== $(date '+%Y-%m-%d %H:%M:%S') starting /morning --prep =====" >> "$LOG"
 
 # --print: headless, single-shot. --permission-mode acceptEdits lets it write the
