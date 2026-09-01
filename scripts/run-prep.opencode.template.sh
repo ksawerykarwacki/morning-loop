@@ -97,8 +97,8 @@ elif [ ! -f "$PLAN" ]; then
   # useless and "your auth expired" is actionable.
   if grep -qi "not authenticated\|auth.*expired\|invalid api key\|please run.*auth\|unauthorized" "$LOG"; then
     alert_on_miss "OpenCode auth expired" "Run: opencode auth login, then /morning for today's brief."
-  elif grep -qi "unknown command\|invalid choice\|unknown option" "$LOG"; then
-    alert_on_miss "Runner invocation is wrong" "Flip MORNING_INVOKE_MODE (command|message) in run-prep and retest."
+  elif grep -qi "command not found:\|unknown command\|invalid choice\|unknown option" "$LOG"; then
+    alert_on_miss "Runner invocation is wrong" "opencode rejected the command. Flip MORNING_INVOKE_MODE (command|message) in run-prep and retest."
   elif [ $STATUS -ne 0 ]; then
     alert_on_miss "The prep run failed (exit $STATUS)" "No brief today. Check briefs/launchd.log, then run /morning manually."
   else
