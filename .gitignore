@@ -20,3 +20,6 @@ com.morning-loop.prep.plist
 # second copy, and would make doctor report commands as installed when they are
 # only sitting in the clone.
 .claude/
+
+# opencode workspace artefacts
+.omo/

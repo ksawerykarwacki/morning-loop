@@ -39,10 +39,21 @@ import urllib.error
 import urllib.request
 
 HERE = pathlib.Path(__file__).resolve().parent
-REPO = HERE.parents[2]
-INDEX = REPO / "05-automation/agent-manager/brief-index.json"
-RECEIPTS = REPO / "05-automation/agent-manager/delivery-receipts"
-RENDER_DIR = REPO / "05-automation/agent-manager/briefs"
+
+# Two layouts ship this script: workspace (scripts/ is 3 levels under the root)
+# and standalone package (1 level). Guessing wrong is silent -- it wrote receipts
+# to a sibling of the repo, where the health check that reads them cannot look.
+if (HERE.parent / "briefs").is_dir() or any(HERE.parent.glob("agent-manager-config*.yml")):
+    REPO = HERE.parent
+    ARTIFACTS = REPO / "briefs"
+    RENDER_DIR = ARTIFACTS / "rendered"
+else:
+    REPO = HERE.parents[2]
+    ARTIFACTS = REPO / "05-automation/agent-manager"
+    RENDER_DIR = ARTIFACTS / "briefs"
+
+INDEX = ARTIFACTS / "brief-index.json"
+RECEIPTS = ARTIFACTS / "delivery-receipts"
 
 
 def die(code: int, msg: str, receipt: dict | None = None) -> None:
