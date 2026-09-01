@@ -33,11 +33,16 @@ CLAUDE_PID=$!
 ( sleep 1200; kill -0 "$CLAUDE_PID" 2>/dev/null && {
     echo "watchdog: prep exceeded 20 min, killing $CLAUDE_PID" >> "$LOG"
     kill -TERM "$CLAUDE_PID" 2>/dev/null
-  } ) &
+  } ) >>"$LOG" 2>&1 &
 WATCHDOG_PID=$!
 wait "$CLAUDE_PID"
 
 STATUS=$?
+# Reap the sleep BEFORE its parent: killing the subshell alone orphans the sleep,
+# which keeps an inherited stdout open and makes anything waiting on this script
+# block for the full 20 minutes after the run has already finished. The explicit
+# redirect above is the other half - without it the watchdog holds the caller's pipe.
+pkill -P "$WATCHDOG_PID" 2>/dev/null
 kill "$WATCHDOG_PID" 2>/dev/null      # run finished in time; retire the watchdog
 echo "===== $(date '+%Y-%m-%d %H:%M:%S') claude finished (exit $STATUS) =====" >> "$LOG"
 
