@@ -44,20 +44,23 @@ import sys
 #
 # OpenCode has no separate commands directory -- a skill IS the slash command --
 # so /morning resolves from the same place as every drafter.
+# OpenCode has no separate commands directory -- a skill IS the slash command --
+# so /morning resolves from the same place as every drafter. It takes the skill's
+# identity from the directory name, so `name:` in the frontmatter is conventional
+# rather than required, and doctor does not fail a skill for omitting it: a check
+# that reports a working skill as broken costs more than the one it catches.
 CLIENTS = {
     "claude": {
         "skills": ("{repo}/.claude/skills/{name}/SKILL.md",
                    "{home}/.claude/skills/{name}/SKILL.md"),
         "commands": ("{repo}/.claude/commands/{name}.md",
                      "{home}/.claude/commands/{name}.md"),
-        "needs_name": False,
     },
     "opencode": {
         "skills": ("{repo}/.opencode/skills/{name}/SKILL.md",
                    "{home}/.config/opencode/skills/{name}/SKILL.md"),
         "commands": ("{repo}/.opencode/skills/{name}/SKILL.md",
                      "{home}/.config/opencode/skills/{name}/SKILL.md"),
-        "needs_name": True,
     },
 }
 
@@ -214,8 +217,6 @@ def check_frontmatter(path: str, client: str = "claude") -> str | None:
         return "no frontmatter"
     if "description:" not in head:
         return "frontmatter has no description"
-    if CLIENTS[client]["needs_name"] and not re.search(r"^name:", head, re.M):
-        return "frontmatter has no name, which OpenCode requires to register a skill"
     return None
 
 
