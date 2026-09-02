@@ -106,8 +106,8 @@ The package went to GitLab, then I cloned it as a new adopter and worked through
 
 | | What it did | What it does now |
 |---|---|---|
-| 11 | Reported `/morning` and `/standup` as **MISSING** in a fresh clone, when they ship in `commands/` and were merely not installed. The fix text also named a folder the package no longer uses | Three-state, matching skills: `ok` / **`NOT INSTALLED`** (run the installer) / `MISSING` (not in the package, pull) |
-| 12 | `install-skills.sh --repo` resolved its target three levels above the package, correct in the workspace and **outside the repo** in a standalone clone | Uses the real git root |
+| 11 | Reported `/morning` and `/standup` as **MISSING** in a fresh clone, when they ship in `commands/` and were merely not installed. The fix text also named a folder the package no longer uses | Four states, matching skills: `ok` / **`NOT INSTALLED`** (ships here, run the installer) / `NOT LOADABLE` (on disk, in a folder this client cannot load from) / `MISSING` (not in the package, pull) |
+| 12 | `install-skills.sh --repo` resolved its target three levels above the package, correct in the workspace and **outside the repo** in a standalone clone | Probes the layout instead of counting parents: the workspace above the clone if there is one, otherwise the clone, and it says which. Counting parents was the first version of this fix and it broke the nested-clone case in the same shape |
 | 13 | Reported the notifier as **MISSING** while it sat in `scripts/`, next to the script doing the reporting | Resolves in both layouts |
 | 14 | Setup step 1 told you to `cd 05-automation/agent-manager/morning-loop-share`, **a directory that does not exist in a clone** | Layout-agnostic, correct in both |
 
@@ -115,12 +115,60 @@ None would have broken anything permanently. Each would have cost twenty confusi
 
 **A clean-clone adoption run now gates every publish of this package.** Writing the validator was not enough; the validator had to be validated by using it the way an adopter does.
 
+## What landed after this file was written
+
+Two adopters ran the clean-clone gate this release created, and both found things in it.
+
+**Daniel Zhu's OpenCode port, merged 2026-09-01.** The package could not install itself on OpenCode at all:
+`install-skills.sh` and `doctor.py` both hardcoded `~/.claude/…`, so an unmodified run copied 19 files where
+nothing reads them **and reported success**. That is this release's own bug, one layer out: not "the skill is
+in the wrong folder" but "the right folder depends on the client and nobody asked". Both scripts now carry a
+`CLIENTS` matrix and `detect_client()`, `--client=opencode` forces it, and `scripts/run-prep.opencode.template.sh`
+is the OpenCode runner. On OpenCode a skill *is* the slash command, so `/morning` installs as a skill. His clone
+surfaced 8 package bugs; 4 hit every adopter regardless of client. The same merge shipped
+`scripts/com.morning-loop.prep.plist.template`, so the launchd job no longer has to be written from scratch,
+and stopped the watchdog holding its caller open for 20 minutes.
+
+**A second clean-clone run, 2026-09-02.** The doctor's own `repo_root()` returned the first ancestor holding a
+`.git`, which is the *package clone* when the package is cloned inside a workspace, the layout `ADOPT-MORNING.md`
+blesses. Measured: with the root at the clone, `standup`, `team-standup` and `ticket-brief` all read MISSING;
+with the root at the workspace they resolve to real installed files. So a correct, fully installed setup was
+reported as "4 thing(s) cannot run", and the fix text told the adopter to write skills that already ship and to
+comment out working coverage. **The validator built to stop a state being reported as something it is not was
+doing exactly that**, which is the most useful possible place for this bug to turn up. It now probes the layout
+and prints the root it chose and why. The same run added the check that was missing entirely: nothing in
+`doctor.py` mentioned a rubric, while the verify stage resolves every rubric through `paths.rubrics_dir`, and no
+shipped config defined that key. A drafter could pass the doctor and then be graded against `_base` alone, one
+level below where anyone was looking.
+
+**Still open, and deliberately not fixed here, because it is a permission decision.** The v3 permission model is
+encoded twice and the two copies disagree. `commands/morning.md` gates *shipping* and lets the unattended prep
+write drafts locally. All three shipped configs still say `gated_at_morning_approval: [run_drafting_subagents]`,
+which is v2's model where the gate releases the drafting itself. The names the 2026-08-19 work log describes,
+`run_local_drafting_subagents` under `unattended_allowed` and a gate called `ship_any_draft_externally`, appear
+**zero** times in the package. `permissions.never_auto` is identical under either reading, so no external action
+is easier to trigger and nothing is unsafe today; but a config and a command that disagree about what the gate
+means is the same class of defect as a rule naming a skill that cannot load, and reconciling a permission list
+belongs to the author.
+
+---
+
 ## Honest status
 
 v3.1 fixes packaging, validation and onboarding. It does not yet have a clean unattended run behind it:
 
 - **08-19:** hand-invoked. Zero.
-- **08-20:** fired on schedule, died after 45 seconds of DarkWake. Zero. Fixed with `caffeinate -i`.
+- **08-20:** fired on schedule, died after 45 seconds of DarkWake. Zero. Fixed with `caffeinate -i`, which now ships in `scripts/run-prep.template.sh`.
 - **08-21 (run #30):** fired **exactly on time**, delivered the brief unattended, wrote 5 real drafts, then the watchdog killed it at 50 minutes with none of them verified. Zero, because the criterion needs a drafted **and verified** artefact.
 
-The scheduler problem is solved. The remaining gap is that pre-drafting does not finish inside the window and did not leave graded work when cut off, which is what changes 8, 9 and 10 address. **Day count against KM-14354: zero of five.**
+The remaining gap is that pre-drafting does not finish inside the window and did not leave graded work when cut off, which is what changes 8, 9 and 10 address. **Day count against KM-14354: zero of five.**
+
+**One correction to "the scheduler problem is solved", from a second machine.** `caffeinate -i` holds a machine
+awake for a run that has already started. It cannot wake one to start a run, and it does not make an in-app
+scheduled task complete while nobody is there. On an adopter's laptop with `sleep 1` on AC and battery, Power Nap
+on, and no scheduled wake for the job, 8 dispatches over 9 working days produced **0 unattended runs**: the 2 that
+fired inside the cron slot took **8h53m41s** and **7h04m08s** of wall clock to write their plan file, while the 2
+that fired during working hours took **4m15s** and **4m13s**. Birthtime equals mtime on all 8 plan files, so
+nothing was resumed. Same code, same config; the variable was whether a human opened the lid. "Fires on time" and
+"completes unattended" are two claims and only the first is settled, so a run counts only when
+`pmset -g sched` and `pmset -g custom` say the machine could have finished it alone.

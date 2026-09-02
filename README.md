@@ -7,8 +7,11 @@
 > Two differences from the workspace layout:
 > - **Your config lives at the repo root**: `agent-manager-config.<you>.yml`. `doctor.py` looks there.
 >   It is gitignored, so your config never lands in the shared package.
-> - **`commands/` and `rubrics/` ship with the package.** `install-skills.sh` copies the commands into
->   `~/.claude/commands/`, which is the step whose absence broke adoption before v3.1.
+> - **`commands/`, `rubrics/` and the skills ship with the package.** `install-skills.sh` copies them
+>   into whichever directories *your* client loads from, which is the step whose absence broke adoption
+>   before v3.1. On Claude Code that is `~/.claude/skills/` and `~/.claude/commands/`; on OpenCode a skill
+>   *is* the slash command, so both go to `~/.config/opencode/skills/`. `doctor.py` and
+>   `install-skills.sh` detect the client, and `--client claude|opencode` overrides the guess.
 
 
 ## Start here (v3.1)
@@ -32,58 +35,90 @@ This is the daily loop Tomek runs every morning, packaged so **you can hand it t
 
 Built as Quick Win #1 + #2 of the squad's JTBD-automation work (O3 KR3.3, reusable workflows). The whole point is that it's the **same loop for everyone**: you only supply your own config.
 
-**v2 is out.** The loop no longer waits for you to run it. It runs on a schedule, delivers the whole brief to you, notifies you, then checks that the brief actually landed. Delivery needs no account and no signup. If you adopted v1, read `V2-WHATS-NEW.md` first: it lists what changed, what got folded back in from everyone's adoption feedback, and what still isn't fixed.
+**v3.1 is the current release.** The loop no longer waits for you to run it: it runs on a schedule, drafts the local-only work in the unattended prep, delivers the whole brief to you, notifies you, then checks that the brief actually landed. Delivery needs no account and no signup. Read `V2-TO-V3.1.md` for the whole arc in one place, or `V3-1-WHATS-NEW.md` for this release's detail. `V2-WHATS-NEW.md` and `V3-WHATS-NEW.md` are still here as the per-release history.
 
 ---
 
 ## What's in this folder
 ```
 README.md                         ← you are here
-V2-WHATS-NEW.md                   ← what changed in v2 and why (read this if you adopted v1)
+V2-TO-V3.1.md                     ← the whole arc in one document; start here if you adopted v1 or v2
+V3-1-WHATS-NEW.md                 ← this release's detail (then V3-WHATS-NEW.md, V2-WHATS-NEW.md)
+V3-1-ROLE-ADAPTATION-DESIGN.md    ← why the loop adapts to your role instead of shipping role drafters
 ADOPT-MORNING.md                  ← the full onboarding guide (read this next)
-MODIFICATIONS.md                  ← the menu of adopter-built mods — pick and choose what to adopt
+CONTRIBUTING.md                   ← how to get something you built into the package
+adoption-log.md                   ← record that you ran someone else's automation
+MODIFICATIONS.md                  ← the menu of adopter-built mods, pick and choose what to adopt
 RUN-AND-NOTIFY.md                 ← how to run the loop unattended + get it delivered to you
-ATTENTION-TRIAGE.md               ← spec for the next stage (notification triage, ranked by your OKRs)
-.claude/commands/
+ATTENTION-TRIAGE.md               ← the spec behind the attention-triage skill
+agent-manager-config.template.yml ← COPY + FILL this. It is the only file that is "yours"
+commands/
   morning.md                      ← the /morning command (the orchestrator)
-  brief.md                        ← /brief <#id> — reopen a past brief with its full context
+  brief.md                        ← /brief <#id>, reopen a past brief with its full context
   standup.md                      ← /standup (the SENSE phase morning is built on)
   team-standup.md                 ← /team-standup (personal brief for devs/designers)
-skills/
-  agent-manager-config.template.yml ← COPY + FILL this — it's the only file that's "yours"
-  morning-feedback.md             ← the after-a-week feedback skill (auto-fires ~day 7)
-  product-pulse.md                ← pulse (used by standup)
-  jtbd-capture.md                 ← run this FIRST to list your jobs before configuring routing
-  growth-circle-update.md, meeting-debrief.md, sprint-plan.md, backlog-analysis.md,
-  sprint-report.md                ← the drafter skills the routing table can call
-  okr-tracker/, ops-update/, stakeholder-comms/  ← drafters in SKILL.md folder format
+skills/<name>/SKILL.md            ← 15 loadable skills, the shape a client can actually load
+  jtbd-capture/                   ← run this FIRST to list your jobs before configuring routing
+  product-pulse/                  ← pulse (used by standup)
+  morning-feedback/               ← the after-a-week feedback skill (auto-fires ~day 7)
+  attention-triage/, backlog-analysis/, growth-circle-update/, meeting-debrief/,
+  okr-tracker/, ops-update/, sprint-plan/, sprint-reporting/, stakeholder-comms/,
+  stall-escalation/, ticket-brief/, ticket-quality-check/   ← the drafters routing can call
+  agent-manager-config.template.yml    ← byte-identical copy of the root template, kept for the
+  agent-manager-config.engineer.yml    ←   workspace layout; the engineer variant is prefilled
+rubrics/
+  _base.rubric.yml                ← every draft is graded against this, plus its own rubric if it has one
+  README.md                       ← the grading contract the verifier applies check by check
+  <skill>.rubric.yml              ← one per drafter that has a calibrated standard
 scripts/
+  doctor.py                       ← validates your setup: ok / NOT INSTALLED / NOT LOADABLE / MISSING
+  install-skills.sh               ← installs skills + commands into your client's load paths, then verifies
   run-prep.template.sh            ← schedule the read-only pre-run (launchd) + delivery safety net
+  run-prep.opencode.template.sh   ← the same runner for OpenCode
+  com.morning-loop.prep.plist.template  ← the launchd job the runner is scheduled by
   notify.py                       ← delivers the brief (macOS notification / Mattermost / file)
   SETUP-DELIVERY.md               ← pick a channel. The default costs ZERO setup: read this
 ```
 
 ---
 
-## Install (where each file goes)
-Drop the files into your Claude Code setup, mirroring these locations:
+## Install
+**Do not hand-copy the files.** That is how v2 and v3 were adopted and it is how three developers
+ended up with drafters that had never run: a skill in the wrong directory is invisible in exactly the
+way a missing one is not. Run the installer, then the doctor:
 
-| From this package | Goes to |
-|---|---|
-| `.claude/commands/*.md` | your repo's `.claude/commands/` (or `~/.claude/commands/` to make it global) |
-| `skills/*.md` (flat files) | your `06-skills/skills/` (or wherever your project keeps skill markdown) |
-| `skills/okr-tracker/`, `ops-update/`, `stakeholder-comms/` (folders) | `~/.claude/skills/` (these are SKILL.md-format global skills) |
-| `scripts/run-prep.template.sh` | your repo's automation folder; copy to `run-prep.sh` and edit |
-| `agent-manager-config.template.yml` | copy to `agent-manager-config.yml` next to your skills, then **fill it in** |
+```bash
+./scripts/install-skills.sh --dry-run     # see what it would do
+./scripts/install-skills.sh               # do it, then verify itself
+python3 scripts/doctor.py                 # do not proceed until this exits 0
+```
 
-Paths inside the command/config are repo-relative (`01-sprint-operations/current/...`, `05-automation/agent-manager/...`). If your workspace uses a different layout, adjust the `paths:` block in your config — that's the only place paths are hard-set.
+It resolves your client's real load paths and puts each piece where that client reads it:
+
+| From this package | Goes to (Claude Code) | Goes to (OpenCode) |
+|---|---|---|
+| `skills/<name>/SKILL.md` | `~/.claude/skills/<name>/SKILL.md` | `~/.config/opencode/skills/<name>/SKILL.md` |
+| `commands/*.md` | `~/.claude/commands/*.md` | `~/.config/opencode/skills/<name>/SKILL.md` (a skill *is* the command) |
+| `agent-manager-config.template.yml` | copy to `agent-manager-config.<you>.yml` and **fill it in** | same |
+| `scripts/run-prep.template.sh` | copy to `run-prep.sh` and edit | use `run-prep.opencode.template.sh` |
+
+`--repo` installs into a checkout instead of your home directory. It probes the layout rather than
+counting parents, so a package cloned inside a workspace installs into the *workspace*; with no workspace
+above the clone it says so and installs into the clone, which loads only for a session rooted there.
+`$HOME` always loads, which is why it is the default. `doctor.py` makes the same two probes and prints the
+root it chose, because the installer writing where the doctor does not look is how this went wrong before.
+
+Paths inside the command and config are repo-relative (`01-sprint-operations/current/...`,
+`05-automation/agent-manager/...`). If your workspace uses a different layout, adjust the `paths:` block
+in your config; that is the only place paths are hard-set. `paths.rubrics_dir` is one of them, and the
+verifier resolves every rubric through it.
 
 ---
 
 ## The fastest way to adopt: hand it to your Claude
 Once the files are in place, literally tell your Claude Code:
 
-> "Read `ADOPT-MORNING.md` and `skills/agent-manager-config.template.yml`, then walk me through setting up my own morning loop: help me do a JTBD capture, fill my config, and do a first dry run."
+> "Read `ADOPT-MORNING.md` and `agent-manager-config.template.yml`, then walk me through setting up my own morning loop: help me do a JTBD capture, fill my config, and do a first dry run."
 
 It will run `/jtbd-capture` with you, help you fill the config to your role and meetings, and do a first `/morning` (say **`n`** at the gate the first day just to see the plan). That's it.
 
@@ -100,12 +135,24 @@ It will run `/jtbd-capture` with you, help you fill the config to your role and 
 ---
 
 ## The safety contract (why it's safe to run, even scheduled)
-1. **Sense + plan are read-only** — query + write local files only. Safe to schedule unattended.
-2. **Drafting is gated** — no drafter runs without your explicit yes at the morning gate.
+1. **Sense, plan and verify are read-only.** They query and write local files only. Safe to schedule unattended.
+2. **Shipping is gated, and shipping is the only thing that ever was.** Writing a draft into your review
+   directory is a local file write, so the unattended prep may do it when `dispatch.predraft_in_prep` is on. It ships off.
+   Sending that draft anywhere needs your explicit, per-item yes. The v2 gate asked permission to *start
+   work*; this one asks permission to *release it*, which is where the risk always lived.
 3. **Nothing leaves your workspace automatically** — creating a Jira ticket, publishing Confluence, posting to chat is `never_auto`; each ship is confirmed individually, even after you approve the gate.
-4. **A draft is not automation; a shipped-on-trigger job is.** The run log stays honest about which is which — that's the evidence trail.
+4. **A draft is not automation; a shipped-on-trigger job is.** The run log stays honest about which is which, and that is the evidence trail.
 
 **Do not loosen the `permissions:` block in your config.** The model depends on it.
+
+**One inconsistency to be aware of, for the author to reconcile.** `commands/morning.md` implements the
+model in point 2, but every shipped config still lists `gated_at_morning_approval: [run_drafting_subagents]`,
+which is the v2 model where drafting itself is what the gate releases. Tomek's 2026-08-19 work log describes
+the intended v3 lists as `run_local_drafting_subagents` under `unattended_allowed` with the gate renamed to
+`ship_any_draft_externally`, and neither of those strings appears anywhere in the package. So the command and
+the configs disagree about what the gate is for. Nothing here is a hole: `never_auto` still covers every
+external action in both readings, and it is the same in both. But which list drafting belongs in is the
+author's call, not a doc fix, so it is recorded rather than changed.
 
 ---
 

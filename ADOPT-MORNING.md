@@ -44,32 +44,76 @@ Then:
 ./scripts/install-skills.sh               # do it, then verify itself
 ```
 
-It copies each `skills/<name>/SKILL.md` into `~/.claude/skills/`, **refuses to install anything without frontmatter and a description** (which is the number-one reason a skill silently never runs), backs up any skill of yours that differs rather than overwriting it, and then runs the doctor because a copy that exits zero is not proof.
+It detects your client and copies each `skills/<name>/SKILL.md` into the directory that client actually
+loads from: `~/.claude/skills/` on Claude Code, `~/.config/opencode/skills/` on OpenCode. It **refuses to
+install anything without frontmatter and a description** (which is the number-one reason a skill silently
+never runs), backs up any skill of yours that differs rather than overwriting it, and then runs the doctor,
+because a copy that exits zero is not proof. Commands go to `~/.claude/commands/` on Claude Code; on
+OpenCode a skill *is* the slash command, so `/morning` is installed as a skill next to the drafters.
 
-Use `--repo` instead if you would rather install into the repo's `.claude/skills/`.
+Pass `--client=claude` or `--client=opencode` if the detection guesses wrong (the value takes an `=`).
+Use `--repo` if you would rather install into a checkout than into `$HOME`. `--repo` probes the layout
+rather than counting parents: if there is a workspace above this clone it installs there, and if there is
+not it says so and installs into the clone, which loads only for a session rooted inside it. `$HOME`
+always loads, so that stays the default.
 
 ### Step 2 — copy the config template and run the doctor (3 min)
 
 ```bash
-cp skills/agent-manager-config.template.yml \
-   ../../../06-skills/skills/agent-manager-config.<you>.yml
+# standalone clone: the canonical template is the one at the package root
+cp agent-manager-config.template.yml agent-manager-config.<you>.yml
+
+# workspace layout: same file, into the skills directory /morning resolves from
+cp agent-manager-config.template.yml \
+   06-skills/skills/agent-manager-config.<you>.yml
+
 python3 scripts/doctor.py
+```
+
+`skills/agent-manager-config.template.yml` is a byte-identical duplicate of the root template, kept so the
+workspace layout keeps working. Copy from the root one; neither is going away. If you are an engineer,
+`skills/agent-manager-config.engineer.yml` is the same template with the dev routing already filled in.
+
+**Where the filled config has to live is not one path, and this is worth reading once.** `/morning`
+resolves `$MORNING_CONFIG`, then `<package>/skills/agent-manager-config.<you>.yml`, then
+`06-skills/skills/agent-manager-config.<you>.yml`. `doctor.py` resolves `$MORNING_CONFIG`, then
+`06-skills/skills/…`, then `<repo-root>/agent-manager-config.<you>.yml`. Those overlap in the workspace
+layout and **do not overlap in a standalone clone**, where the command reads `skills/` and the doctor
+reads the root. Until the two resolvers agree, set `MORNING_CONFIG` to your filled config and both will
+find the same file:
+
+```bash
+export MORNING_CONFIG="$PWD/agent-manager-config.<you>.yml"
 ```
 
 The doctor is the whole difference in this release. It distinguishes three states that used to look identical:
 
 ```
 ✓ gc_update            growth-circle-update     ok
+✗ dev_kickoff          ticket-brief             NOT INSTALLED
+    fix: ships in the package, just not copied yet. Run ./scripts/install-skills.sh
 ✗ sprint_package       sprint-report            NOT LOADABLE
-    fix: mkdir -p ~/.claude/skills/sprint-report && cp '...' ~/.claude/skills/sprint-report/SKILL.md
+    fix: on disk, but in a directory this client can never load from. Reinstall it.
 ✗ ideation_synthesis   idea-forge               MISSING
     fix: no file named idea-forge anywhere. Either write the skill, or comment the rule out
          so it stops looking like coverage.
 ```
 
+Four states, not three, because "not in the package" and "in the package and not installed yet" need
+completely different fixes, and reporting the second as the first is how a fresh clone got told to write
+skills that already ship. The fix commands name your client's real directories, so they differ between
+Claude Code and OpenCode.
+
 **A rule whose skill cannot resolve is silent at runtime.** It fires, finds nothing, reports no error, and your config keeps describing coverage you do not have. Run the doctor after setup and again every time you edit the config.
 
 It found a real bug in Tomek's own config on its first run, on a chain that would next have fired at a sprint boundary.
+
+**It checks your rubrics too, and that is the newest check.** The verify stage resolves every rubric
+through `paths.rubrics_dir`, so a config with no such key cannot grade anything, not even the `_base`
+fallback. The doctor treats a missing `paths.rubrics_dir` or a missing `_base.rubric.yml` as blocking, and
+reports a drafter with no rubric of its own as `_base fallback (no skill rubric)`: a real gap, worth
+knowing about, not a failure. That is the same silent-coverage shape as an unresolvable skill, one level
+down.
 
 ### Step 3 — let the loop read your role, then correct it (5 min)
 
@@ -104,16 +148,42 @@ Chris worked that out by hand and wrote *"My JTBD has 14 automatable jobs; exact
 
 See `scripts/SETUP-DELIVERY.md`. Two notes from the first weeks of real running:
 
-- **On macOS, keep `caffeinate -i` in `run-prep.sh`.** A launchd DarkWake gives roughly 45 seconds before the machine goes back to sleep and kills the run. That cost a whole day on 2026-08-20 and reported itself as a login failure.
-- **On Windows, OpenCode or Cursor, expect to patch the runner**, and please contribute the patch back. Maria, Xitong, Andres and Daniel Zhu each fixed platform issues that are still not in the shared code.
+- **`caffeinate -i` now ships in `run-prep.template.sh`, and you should leave it there.** A launchd
+  DarkWake gives roughly 45 seconds before the machine goes back to sleep and kills the run. That cost a
+  whole day on 2026-08-20 and reported itself as a login failure.
+- **The launchd job ships too**, as `scripts/com.morning-loop.prep.plist.template`. Fill its placeholders
+  per `scripts/SETUP-DELIVERY.md` rather than writing a plist from scratch.
+- **A scheduler that fires is not the same as an unattended run.** `caffeinate` holds the machine awake
+  once the run has started; it cannot wake a sleeping machine to start one. On a laptop with `sleep 1` and
+  Power Nap on and no scheduled wake for the job, an in-app scheduled task can dispatch inside a DarkWake
+  and then take hours of wall clock to finish, completing when you open the lid. Measured on one adopter's
+  machine: two in-slot runs took 8h53m and 7h04m end to end, while two runs that fired during working hours
+  took about 4 minutes each. Check `pmset -g sched` and `pmset -g custom` before you record a run as
+  unattended.
+- **OpenCode is supported in the shared code now**: `scripts/run-prep.opencode.template.sh`, plus client
+  detection in the doctor and the installer. **On Windows or Cursor, expect to patch the runner**, and
+  please contribute the patch back. Maria and Daniel Blam each fixed platform issues that are still not in
+  the shared code.
 
 ## The contract (why this is safe to run unattended)
-1. **Sense + plan are read-only** — they only query and write local files. Safe to schedule.
-2. **Drafting is gated** — the loop never runs a drafter without your explicit yes at the morning gate.
+1. **Sense, plan and verify are read-only.** They only query and write local files. Safe to schedule.
+2. **Shipping is gated, and shipping is the only thing that ever was.** A draft written into your review
+   directory is a local file write, so the unattended prep may produce one when
+   `dispatch.predraft_in_prep` is on; it ships off. Sending a draft anywhere needs your explicit,
+   per-item yes at the gate.
 3. **Nothing leaves the workspace automatically** — creating a Jira ticket, publishing Confluence, posting to Mattermost is `never_auto`; each ship is a separate, individually-confirmed action. This holds even after you approve the morning gate.
 4. **A draft is not automation; a shipped-on-trigger job is.** The run log is honest about which is which — that's the evidence trail for the O3 automation KR.
 
 Do **not** loosen `permissions` in your config. The whole model depends on it.
+
+**An inconsistency the author needs to settle, recorded here rather than fixed.** Point 2 is what
+`commands/morning.md` implements, but the shipped configs still say
+`gated_at_morning_approval: [run_drafting_subagents]`, which is v2's model where the gate releases the
+drafting itself. The intended v3 lists per Tomek's 2026-08-19 work log are
+`run_local_drafting_subagents` under `unattended_allowed` and a gate named `ship_any_draft_externally`;
+neither string exists anywhere in the package. `never_auto` is unaffected and identical under either
+reading, so no external action is easier to trigger. Which list drafting belongs in is a permission
+decision, so it stays the author's to make.
 
 ---
 
@@ -135,6 +205,13 @@ If it's noisy or not useful yet, set `feedback.enabled: false` — but tell Tome
 - **"An MCP isn't connected"** — the loop notes it and continues with what it has; it never fabricates. Connect the MCP and re-run.
 - **Sprint phase looks wrong** — check `sprint.anchor_start`; the loop prefers Jira's `openSprints()` endDate when `prefer_jira: true`.
 - **Too many drafts firing** — you added too many routing rules too fast. Trim back to the jobs you actually review.
-- **Scheduled pre-run didn't write a plan** — check `launchd.log` in this folder; usually a PATH or repo-path issue in `run-prep.sh`.
+- **Scheduled pre-run didn't write a plan.** Check the log the runner writes: `run-prep.template.sh`
+  logs to `05-automation/agent-manager/launchd.log` under your workspace root, and the OpenCode runner and
+  the `SETUP-DELIVERY.md` recipe log to `briefs/launchd.log`. Usually a PATH or repo-path issue in
+  `run-prep.sh`.
+- **The doctor reports things you know work as MISSING.** Check which root it picked; it prints the root
+  and how it chose it next to the config line. A package cloned inside a workspace has to resolve to the
+  *workspace*, not to the package clone, or every skill installed in the workspace reads as absent.
+  `python3 scripts/doctor.py --repo /path/to/your/workspace` forces it.
 
 Questions → Tomek. This loop is Quick Win #1 + #2 from the JTBD automation work; getting the whole squad on it is the O3 KR3.3 (reusable workflows) bar.

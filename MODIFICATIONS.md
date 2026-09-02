@@ -22,8 +22,8 @@ A browsable catalog of changes squad members have made to their own morning loop
 | 5 | Cloud routine (unattended, laptop-off) | scheduling | all | ✅ in package (v2) as the `schedule.backstop` | Loop runs and notifies you without your machine on |
 | 6 | Windows / PowerShell scheduled pre-run | scheduling | Windows | 🟢 personal | launchd pendant for Windows Task Scheduler |
 | 7 | Cursor adapter | client port | Cursor users | 🟢 personal | Run the loop in Cursor (no Claude Code) |
-| 8 | OpenCode install + `install.sh` | client port | OpenCode users | 🟢 personal | Fixes the half-adopt trap (commands never copied) |
-| 9 | `ticket_brief` engineer drafter | new skill | engineers | 🔶 proposed | First dev-side drafter (kickoff brief for new/stale tickets) |
+| 8 | OpenCode install + client detection | client port | OpenCode users | ✅ in package (v3.1) | `doctor.py` and `install-skills.sh` detect the client and use its real load paths |
+| 9 | `ticket_brief` engineer drafter | new skill | engineers | ✅ in package (v3.1) | First dev-side drafter (kickoff brief for new/stale tickets) |
 | 10 | `meeting-debrief` `perspective` param | skill change | non-PO roles | 🔶 proposed | Debrief from your role's angle, not stakeholder framing |
 | 11 | `decision_log_sync` | config + skill | Scrum Masters / anyone owning a decision log | 🟢 personal | Decision log stays current, auto-reconciled before retro |
 | 12 | `daily-overview` / mm-digest as `daily_spine` | config | PO/POC with an existing daily | ✅ in package (v2) | Map the spine to your own sense tool instead of `/standup` |
@@ -31,10 +31,17 @@ A browsable catalog of changes squad members have made to their own morning loop
 | 14 | **Proactive delivery** (RUN→DELIVER→NOTIFY→HEALTH) | command + config | **all, this is the headline v2 change** | ✅ in package (v2) | The full brief reaches you every morning with no trigger and, by default, no signup |
 | 15 | MCP preflight check | command | all | ✅ in package (v2) | Names which sources are degraded *before* sensing, so a permission gap stops looking like a broken loop |
 | 16 | Ceremony capture writes files | command + config | anyone with a capture KR | ✅ in package (v2) | Sensed meetings become artifacts instead of being reasoned about and discarded |
-| 17 | `install.sh` bootstrap + client matrix | tooling | Claude Code / Cursor / OpenCode | 🔶 proposed | Fixes the half-adopt trap (commands never copied into an active dir) |
-| 18 | `ticket_brief` engineer drafter | new skill | engineers | 🔶 proposed, **biggest remaining gap** | The package still ships zero drafters for the three devs using it |
+| 17 | Installer + client matrix | tooling | Claude Code / OpenCode | ✅ in package (v3.1) | `install-skills.sh` + the `CLIENTS` matrix in `doctor.py`. Cursor is still unmapped |
+| 18 | *(duplicate of #9, kept so the numbering does not shift)* | — | engineers | ✅ shipped | The package ships engineer drafters now: `ticket-brief`, `ticket-quality-check`, `stall-escalation`, `attention-triage`, and the `/team-standup` command |
 
 Status key: ✅ in the shared package · 🔶 proposed for the package (use as personal override for now) · 🟢 personal (documented here, adopt if it fits you).
+
+**Statuses re-checked against the package on 2026-09-02.** Several cards still said `🔶 proposed` for mods
+whose menu row already said `✅ in package`, and three said `🟢 personal` for things that had shipped. A menu
+that overstates what is personal costs the same as one that overstates what is shipped: people go and ask an
+author for a file they already have. What is still genuinely not in the package: the Windows runner (#6), the
+Cursor adapter (#7), `meeting-debrief`'s `perspective` parameter (#10, the string appears nowhere in the
+skill), and `decision_log_sync` (#11).
 
 ---
 
@@ -54,31 +61,31 @@ Each mod follows the same shape so it stays scannable and machine-parseable.
 - **Author:** Maria Sommer · **Client/OS:** any (matters when several people share one repo)
 - **What:** `/morning` resolves `agent-manager-config.<user>.yml` first, falling back to the default path, so a shared repo doesn't force everyone onto one config.
 - **Why:** the command hard-codes `06-skills/skills/agent-manager-config.yml`, so the namespaced copy ADOPT-MORNING recommends is never picked up. Raised twice, still workaround-only.
-- **Type:** command · **Applies to:** anyone sharing a repo · **Status:** 🔶 proposed for the package.
-- **How to adopt now:** a thin personal command override that points to your config path, leaving the shared command untouched.
+- **Type:** command · **Applies to:** anyone sharing a repo · **Status:** ✅ in the package. `commands/morning.md` resolves `$MORNING_CONFIG`, then `<package>/skills/agent-manager-config.<user>.yml`, then the `06-skills/skills/` pair, and stops rather than inventing a default.
+- **Caveat:** `doctor.py` resolves a different set (`$MORNING_CONFIG`, `06-skills/skills/…`, then `<repo-root>/agent-manager-config.<user>.yml`). The two overlap in the workspace layout and not in a standalone clone. Set `MORNING_CONFIG` and both agree.
 - **Source:** KM-13612 (Maria 2026-07-07, re-raised 2026-07-20; +1 Xitong).
 
 ### 3. `routine_health` self-check
 - **Author:** Maria Sommer · **Client/OS:** any with a machine-dependent scheduled pre-run
 - **What:** a daily sense step that checks each monitored scheduled task AND that its END deliverable actually exists (e.g. the Mattermost post got posted), not just that a job ran. Fires a diagnosis draft only on a miss.
 - **Why:** Maria's Monday supporter briefing silently failed twice; the cloud half succeeded so output-page checks looked healthy while the real deliverable was missing.
-- **Type:** signal + config · **Applies to:** anyone with scheduled pre-runs · **Status:** 🔶 proposed for the package.
-- **How to adopt now:** add a `routine_health` routing rule (signal `daily`, bucket `draft`) pointing at a task list + the END artifact path to verify.
+- **Type:** signal + config · **Applies to:** anyone with scheduled pre-runs · **Status:** ✅ in the package as the `routine_health` rule in the config template, and as Phase 2c in `commands/morning.md`.
+- **How to adopt:** it is already in your template. Keep it enabled and point it at your END artifact. If you write your own rule instead, add a `routine_health` routing rule (signal `daily`, bucket `draft`) pointing at a task list + the END artifact path to verify.
 - **Source:** KM-13612 (Maria 2026-07-13, 2026-07-20).
 
 ### 4. Squad-scope guard
 - **Author:** Maria Sommer · **Client/OS:** any
 - **What:** decision candidates sourced from the shared KM Jira project must be JQL-verified as members of your current sprint/board before they surface in the plan.
 - **Why:** ticket-pattern matching alone pulled the same two other-squad tickets into her plan twice.
-- **Type:** command override · **Applies to:** anyone in the shared KM project · **Status:** 🔶 proposed for the package.
-- **How to adopt now:** add a mandatory verification step in your override that runs a scoped JQL (`sprint in openSprints() AND ...`) before surfacing any KM ticket.
+- **Type:** command override · **Applies to:** anyone in the shared KM project · **Status:** ✅ in the package. The guard runs *inside* the `jira_board` probe, before the fan-in, because a guard applied after the fan-in is applied to claims whose provenance has already been flattened.
+- **How to adopt:** nothing to do. It is enforced in the probe.
 - **Source:** KM-13612 (Maria 2026-07-13, 2026-07-20).
 
 ### 5. Cloud routine (unattended, laptop-off)
 - **Author:** Chris Gamrot · **Client/OS:** any (runs in the cloud)
 - **What:** the loop set up as a Claude Code cloud routine (Atlassian MCP, read-only, KM-scoped) on a weekday cron, delivering its output and a push notification instead of relying on a local scheduler.
 - **Why:** the local scheduler only fires when the laptop is on and VPN is up, which is why every adopter is stuck at "Assisted." The cloud routine survives the laptop being off, so it actually runs without you remembering.
-- **Type:** scheduling · **Applies to:** all · **Status:** 🟢 personal, proven. See `RUN-AND-NOTIFY.md` for the standard being built from this.
+- **Type:** scheduling · **Applies to:** all · **Status:** ✅ in the package as `schedule.backstop: cloud_routine` in the config template. See `RUN-AND-NOTIFY.md` for the standard built from this.
 - **How to adopt now:** follow `RUN-AND-NOTIFY.md`. Caveat: a cloud routine can't read the Lab-GitLab package files, so the loop logic has to live somewhere cloud-reachable (that's the open structural fix).
 - **Source:** KM-13612 (Chris 2026-07-18).
 
@@ -102,16 +109,16 @@ Each mod follows the same shape so it stays scannable and machine-parseable.
 - **Author:** Xitong Deng · **Client/OS:** OpenCode
 - **What:** a bootstrap that copies command files into the active commands dir, creates/symlinks the skills dir, and ends with a "type /morning to test" verification, plus a client-portability matrix (Claude Code / Cursor / OpenCode use different command dirs).
 - **Why:** it's easy to half-adopt: working config + drafts + run-log but `/morning` itself doesn't run because command files were never copied out of the package. Three adopters hit this independently.
-- **Type:** client port / tooling · **Applies to:** OpenCode users (matrix helps everyone) · **Status:** 🔶 proposed for the package.
-- **How to adopt now:** ask Xitong for his symlink setup; a shared `install.sh` is the proposed package fix.
-- **Source:** KM-13612 (Xitong 2026-07-22).
+- **Type:** client port / tooling · **Applies to:** OpenCode users (matrix helps everyone) · **Status:** ✅ in the package. Daniel Zhu ported it on `opencode-client-port` and it is merged: `doctor.py` and `install-skills.sh` carry a `CLIENTS` matrix plus `detect_client()`, and `scripts/run-prep.opencode.template.sh` is the OpenCode runner.
+- **How to adopt:** run `./scripts/install-skills.sh`, or `--client=opencode` if detection guesses wrong. On OpenCode a skill *is* the slash command, so `/morning` installs as a skill next to the drafters rather than into a commands directory.
+- **Source:** KM-13612 (Xitong 2026-07-22), shipped by Daniel Zhu 2026-09-01.
 
 ### 9. `ticket_brief` engineer drafter
 - **Author:** Xitong Deng · **Client/OS:** any
-- **What:** a dev drafter that writes an implementation-kickoff brief for tickets newly In Progress or stale 3+ days. The package ships no engineer drafter at all, so he wrote his own.
-- **Why:** three developers adopted the loop and zero drafters served them. This is the biggest v2 gap.
-- **Type:** new skill · **Applies to:** engineers · **Status:** 🔶 proposed as the first engineer drafter (pairs with Daniel Zhu's test-gen / PR-drafting asks).
-- **How to adopt now:** ask Xitong for the drafter; route it on `jira_state`.
+- **What:** a dev drafter that writes an implementation-kickoff brief for tickets newly In Progress or stale 3+ days. The package shipped no engineer drafter at all when he wrote it, so he wrote his own.
+- **Why:** three developers adopted the loop and zero drafters served them. That was the biggest v2 gap.
+- **Type:** new skill · **Applies to:** engineers · **Status:** ✅ in the package as `skills/ticket-brief/SKILL.md`, with `ticket-quality-check`, `stall-escalation` and `attention-triage` alongside it. It shipped at v3.1 without a rubric of its own, so the verifier graded it against `_base` alone; it has one now.
+- **How to adopt:** run the installer, then route it on `jira_state`. `skills/agent-manager-config.engineer.yml` has the routing prefilled.
 - **Source:** KM-13612 (Xitong 2026-07-22).
 
 ### 10. `meeting-debrief` `perspective` parameter
@@ -133,7 +140,7 @@ Each mod follows the same shape so it stays scannable and machine-parseable.
 - **Author:** Daniel Blam · **Client/OS:** any
 - **What:** map the `daily_spine` slot to your own sense tool (his = `daily-overview`: Mattermost for-you + Jira reply lens + git WIP) instead of the PO `/standup`. Optionally complement with the services mm-digest for MM summaries.
 - **Why:** `/standup` is built for KM squad PO work; a POC/support role needs "what needs *me* today," not "what should the squad ship toward OKRs."
-- **Type:** config · **Applies to:** PO/POC with an existing daily · **Status:** 🟢 personal.
+- **Type:** config · **Applies to:** PO/POC with an existing daily · **Status:** ✅ in the package: `daily_spine` is a slot in the config template, not a fixed product.
 - **How to adopt:** set `daily_spine` to your sense skill; keep the same one-spine contract (don't run two).
 - **Source:** KM-13612 (Daniel Blam 2026-07-07, 2026-07-16).
 
@@ -141,8 +148,8 @@ Each mod follows the same shape so it stays scannable and machine-parseable.
 - **Author:** Daniel Blam · **Client/OS:** any outside Berlin time
 - **What:** set the loop's day boundary to your timezone (his = Asia/Singapore, UTC+8) so "new day" matches your morning, not CET midnight.
 - **Why:** the seen-log and "since last run" diffs were misaligned to the wrong day.
-- **Type:** config · **Applies to:** anyone outside CET · **Status:** 🟢 personal.
-- **How to adopt:** add a `timezone` field to your config and use it for the day boundary + seen-log.
+- **Type:** config · **Applies to:** anyone outside CET · **Status:** ✅ in the package as `owner.timezone` in the config template.
+- **How to adopt:** set `owner.timezone`; the day boundary and the seen-log both use it.
 - **Source:** KM-13612 (Daniel Blam 2026-07-07).
 
 ---

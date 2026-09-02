@@ -2,7 +2,7 @@
 
 **The one document to read.** `V3-WHATS-NEW.md` and `V3-1-WHATS-NEW.md` are the per-release detail; this is the whole arc in one place.
 
-Updated 2026-08-21.
+Updated 2026-08-21. Claims re-verified against the package on 2026-09-02; corrections are marked inline.
 
 ---
 
@@ -28,9 +28,18 @@ Updated 2026-08-21.
 git clone gitlab@gitlab.thenetcircle.lab:tomzduda/morning-loop.git
 cd morning-loop
 cp agent-manager-config.template.yml agent-manager-config.<you>.yml
+export MORNING_CONFIG="$PWD/agent-manager-config.<you>.yml"
 ./scripts/install-skills.sh      # installs skills and commands, then verifies
 python3 scripts/doctor.py        # do not proceed until this exits 0
 ```
+
+The root `agent-manager-config.template.yml` is the canonical one to copy. `skills/agent-manager-config.template.yml`
+is a byte-identical duplicate kept so the workspace layout keeps working, and `skills/agent-manager-config.engineer.yml`
+is the same template with dev routing prefilled. `MORNING_CONFIG` is in the block on purpose: `/morning` and
+`doctor.py` resolve overlapping but not identical candidate lists, and in a standalone clone the command looks in
+`skills/` while the doctor looks at the root. Setting it makes both read one file.
+
+On OpenCode, `install-skills.sh` and `doctor.py` detect the client themselves; `--client=opencode` forces it.
 
 **Honest status: the package is ready, the loop is not finished.** No clean unattended run behind it yet. Day count against the closing criterion is **0 of 5**. Details at the bottom.
 
@@ -135,10 +144,11 @@ Generate a CM drafter with no golden and no rubric and you get confident ungrade
 | Gap | Raised by |
 |---|---|
 | **No CM drafter, no designer drafter** in the package | Chris; Mathieu never replied on the ticket |
-| **Portability.** Windows, OpenCode and Cursor each need runner patches | Maria, Xitong, Daniel Zhu, Andres — all four fixed things locally that are **still not in the shared code** |
-| **David is blocked by an org admin**, not by the loop: Rovo MCP needs API-token auth enabled | David |
+| **Portability.** Windows and Cursor still need runner patches. **OpenCode no longer does**: Daniel Zhu's client port is merged, so `doctor.py` and `install-skills.sh` detect the client and `scripts/run-prep.opencode.template.sh` ships | Maria and Daniel Blam still have local fixes that are **not in the shared code** |
+| ~~David is blocked by an org admin: Rovo MCP needs API-token auth~~ **Withdrawn 2026-09-02, it was never true.** His briefs reach Jira, git, GitHub and Confluence and cite live keys. What blocked him was local: the scheduled routine ran Phase 1 and 2 only, so drafting could not dispatch, and **0 of his 8 runs was unattended** because the machine sleeps at 1 minute with Power Nap on and no wake is scheduled for the task, so the task dispatches in a DarkWake and finishes on lid-open | David |
 | **Zero ASKs in 21 runs** for a community-manager profile, so the ASK type looks PO-shaped | Chris |
 | **The feedback round is ~28 days overdue** against a 7-day cadence | Daniel Zhu |
+| **The permission model is encoded twice and the two disagree.** `commands/morning.md` gates *shipping* and lets the prep write drafts locally; all three shipped configs still say `gated_at_morning_approval: [run_drafting_subagents]`, which is v2's model where the gate releases the drafting. The intended v3 names from the 2026-08-19 work log, `run_local_drafting_subagents` under `unattended_allowed` and a gate called `ship_any_draft_externally`, appear **nowhere** in the package. `never_auto` is identical under either reading, so nothing external is easier to trigger; which list drafting belongs in is a permission decision and stays the author's | found in the 2026-09-02 package audit |
 
 Open an MR for the platform fixes. There is finally a repo to put them in.
 
@@ -152,6 +162,23 @@ Open an MR for the platform fixes. There is finally a repo to put them in.
 | **08-20** | Fired on schedule, died after **45 seconds** of DarkWake. Misdiagnosed as a login failure | **No** |
 | **08-21** | Fired **exactly on time**, delivered the brief unattended, wrote **5 real drafts** — then the watchdog killed it at 50 minutes with none verified | **No** — the criterion needs a *verified* artefact |
 
-**Day count: 0 of 5.** The scheduler problem is solved. The remaining gap is that pre-drafting does not finish inside the window and did not leave graded work when cut off, which per-item verify now addresses and which nothing has yet proven.
+**Day count: 0 of 5.** The remaining gap is that pre-drafting does not finish inside the window and did not
+leave graded work when cut off, which per-item verify now addresses and which nothing has yet proven.
+
+**"The scheduler problem is solved" was too strong, and a second machine shows why.** `caffeinate -i` ships and
+it works, but it holds a machine awake for a run that has already started; it cannot wake one to start a run.
+On an adopter's laptop with `sleep 1` on both AC and battery, Power Nap on, and no scheduled wake for the job,
+8 in-app dispatches over 9 working days produced **0 unattended runs**: the 2 that fired inside the cron slot
+took **8h53m41s** and **7h04m08s** of wall clock to write a plan file, while the 2 that fired during working
+hours took **4m15s** and **4m13s**. Same code, same config; the difference was whether a human opened the lid.
+So "fires on time" and "completes unattended" are two separate claims, and only the first one is settled. Check
+`pmset -g sched` and `pmset -g custom` before recording a run as unattended.
 
 **A note on how the package itself was tested.** After publishing, it was cloned as a new adopter and walked through `ADOPT-MORNING.md`. That found **six** bugs, including a setup instruction pointing at a directory that does not exist in a clone, and a stray folder that made the doctor report commands as installed when they were only sitting in the checkout. Writing the validator was not enough; the validator had to be validated by using it the way you will. **That clean-clone run now gates every publish.**
+
+Two more adopters have since run that same gate and it keeps earning its place. Daniel Zhu's OpenCode clone
+surfaced 8 package bugs, 4 of which hit every adopter regardless of client, and produced the merged client
+split. A second clean-clone run on 2026-09-02 found that the doctor's own root resolution stopped at the
+package clone when the package is cloned *inside* a workspace, so it reported a correct, fully installed setup
+as "4 thing(s) cannot run" and told the adopter to write skills that already ship. That is the bug this whole
+release is about, in the tool built to catch it, which is the most useful place for it to have been found.
