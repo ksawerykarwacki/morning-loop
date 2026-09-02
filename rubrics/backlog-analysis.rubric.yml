@@ -1,0 +1,76 @@
+schema_version: 1
+extends: _base
+task: "Backlog health assessment and refinement agenda - every non-Done KM ticket in scope scored D/UV/OKR against the prioritization framework, clusters and near-duplicates named with their gate item, stale tickets audited with a recommended action, an OKR alignment map, and the top 5 to 8 prioritized actions before sprint planning"
+calibration_target: "the person running the next refinement works the agenda straight off the report: every score traces to the ticket's real status and assignee, every stale count reconciles, and no ticket in the queried scope is missing from the report"
+created: 2026-09-02
+
+goldens: []
+# No golden path recorded here because the reference example is generated output that lives in the adopter's
+# own workspace, not in the package: SKILL.md names 01-sprint-operations/current/backlog-analysis.md
+# (generated 2026-04-14) as the reference for structure, depth and tone. Point golden 1 at your own copy of
+# that file once you have one. Checks below are derived from the seven output sections and the skill's own
+# Quality Checks block, which is the list it is supposed to self-verify against before saving.
+
+known_reject:
+  - "A backlog report that: says 'Scope: 84 tickets' and lists 71; scores three tickets 2/2/2 with a total of 7; gives story points to tickets Jira has none for; flags STALE 45d on a ticket updated last week; names cluster B with no gate item and no risk level; omits an OKR that CLAUDE.md lists, so its empty Track 1 is never seen; raises a critical-bug override trigger in Section 3 that appears nowhere in the agenda; and ends with a nine-item agenda where four items have no owner and none have a by-when. Must fail every_ticket_accounted (block), scores_derived_not_invented (block), stale_days_computed, clusters_have_gate_item, okr_map_covers_every_okr, override_triggers_have_agenda_item, and agenda_actionable."
+
+checks:
+  # ---- COVERAGE (the skill's own first quality check) ----
+  - id: every_ticket_accounted
+    type: structural
+    severity: block
+    scope: data
+    statement: "Every ticket returned by the scope query (project KM, Products Targeted = Escort CRM, status not Done and not Cancelled) appears exactly once - scored, marked N/A, or listed as active sprint - and the header's ticket count equals the number of rows in the report."
+    rationale: "block: the skill's Quality Check 1, and the header asserts the scope as a number, so a dropped ticket makes an asserted count false. A ticket missing from the report is a ticket nobody refines, and the active-sprint / N-A split exists precisely so that nothing has to be dropped to keep the table readable."
+
+  # ---- SCORING ----
+  - id: scores_derived_not_invented
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "Every D, UV and OKR score is derived from the ticket's real status, assignee and description against the framework's rubric, and the Total equals D + UV + OKR. No story-point or estimate figure is supplied for a ticket where Jira has none."
+    rationale: "block: the skill's Quality Check 2, no made-up estimates. A score is a recommendation with authority, so an invented input silently reorders the refinement agenda and the arithmetic is what makes it checkable."
+
+  - id: category_assigned
+    type: structural
+    severity: normal
+    scope: format
+    statement: "Every scored ticket carries exactly one of the framework's four categories (direct OKR impact, indirect OKR impact, user research, not impactful/park), sorted by Total descending within its category, and no invented category label is used."
+    rationale: "Step 2 says category assignment comes first and the rubric only breaks ties within it. Sorting the whole backlog by raw score across categories is how a well-scored park item outranks a direct OKR item."
+
+  - id: stale_days_computed
+    type: structural
+    severity: normal
+    scope: data
+    statement: "Every STALE Xd flag is computed from the ticket's real last-updated date against the report date, the 30-day threshold is applied consistently, and the stale count and percentage in the health summary reconcile with the Section 5 table."
+    rationale: "The skill's Quality Check 5 asks for exactly this cross-check. Staleness drives the recommended actions and the closing triage item, so a wrong day count recommends closing live work or keeps dead work alive."
+
+  # ---- STRUCTURE ----
+  - id: clusters_have_gate_item
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "Each named cluster (A, B, C) states its dependency chain, its gate item and a risk level. Near-duplicates carry an explicit recommendation of merge, close one, or keep both. Orphans name the epic or parent story that no longer exists or has been completed."
+    rationale: "Step 3 and Section 4. A cluster with no gate item is a list, and the gate item is the only part that changes what gets refined first; a flagged duplicate with no recommendation just moves the decision."
+
+  - id: okr_map_covers_every_okr
+    type: structural
+    severity: normal
+    scope: format
+    statement: "Every active OKR from the configured source appears in the alignment map with its Track 1 / Track 2 / Park split and a coverage call (thin / moderate / strong), and any OKR whose Track 1 is empty or entirely blocked is flagged explicitly. An OKR omitted from the map fails."
+    rationale: "The skill's Quality Check 4. An OKR left out of the map is the one nobody notices has no backlog behind it, which is the single most expensive thing this report can miss."
+
+  # ---- THE AGENDA (what the report is for) ----
+  - id: agenda_actionable
+    type: binary_llm
+    severity: gate
+    scope: data
+    statement: "The refinement agenda holds 5 to 8 items, each with what to do, a by-when (today / next standup / sprint planning / before season planning), why it matters stated as the impact if it is not done, and a named owner. It leads with the highest-leverage item, and when more than 30% of scorable tickets are stale it ends with a stale-triage action."
+    rationale: "gate: Section 7 is the part that gets worked, and the rest of the report is evidence for it. An agenda item with no owner or no when is an observation, and the ordering is the recommendation."
+
+  - id: override_triggers_have_agenda_item
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "Every override trigger identified in Section 3 states its override action explicitly and has at least one matching item in the refinement agenda. A trigger raised and then absent from the agenda fails."
+    rationale: "The skill's Quality Check 3. An override that does not reach the agenda is a queue-jump nobody acts on, and it was raised because the framework says the normal ordering is wrong here."

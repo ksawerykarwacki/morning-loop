@@ -1,0 +1,83 @@
+schema_version: 1
+extends: _base
+task: "Stalled tickets converted into typed next steps - per stall, the status, days in status, goal-criticality, report count, why it is stalled from the changelog, and exactly one SOLVE (mechanical) or ASK (a closed question with a name), plus a process finding once a stall has been reported three times"
+calibration_target: "the engineer who owns the ticket, or whose work it blocks, can send each ASK today to someone who can answer it and approve each SOLVE without deciding anything. A stall that reappears tomorrow in the same words has failed even if every fact in it is true."
+created: 2026-09-02
+
+goldens: []
+# No golden shipped yet. The calibration reference is the failure this skill was written to end, recorded
+# in KM-14354: KM-11720 sat in Ready for release while the loop reported it day after day and the number
+# climbed 11 to 18 to 154 days, and the one useful output of five runs was a question - who owns the
+# release floor for this queue, and on what cadence do these reach PROD. Checks are derived from the
+# threshold table, the SOLVE/ASK contract, the escalation ladder and the Rules block. The first run where
+# an ASK came back answered and the stall closed becomes golden 1: add it and recalibrate.
+
+known_reject:
+  - "A stall list that: opens with 'KM-11720 is very stale (154d)' and no SOLVE and no ASK; dates the stall from the ticket's updated field, which a bulk label edit touched yesterday, so a three-week-old transition reads as fresh; surfaces two tickets from another squad because they carry the KM prefix; lists a Backlog ticket that is 90 days old as a stall; repeats yesterday's four lines verbatim with no report count and no process finding on the one at its fourth run; addresses its single ask to 'the team'; and lists a ticket the Decision Log shows was consciously parked. Must fail every_stall_is_solve_or_ask, stall_reason_from_changelog (block), ask_addressed_to_resolvable_person (block), threshold_matched_to_status, squad_scope_verified, carry_count_and_escalation, not_repeated_verbatim, and conscious_decision_excluded."
+
+checks:
+  # ---- THE TYPED NEXT STEP (the reason this skill exists) ----
+  - id: every_stall_is_solve_or_ask
+    type: structural
+    severity: gate
+    scope: format
+    statement: "Every stall carries exactly one typed next step: a SOLVE naming the mechanical action, or an ASK naming a person and a closed question. A stall emitted as an observation with no type fails, however well described."
+    rationale: "gate: SKILL.md - detecting a stall is not the job, closing it is, and 'never emit a stall as an observation with no type' is the failure this skill exists to end. This is the ship test for the artefact."
+
+  - id: ask_addressed_to_resolvable_person
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "Each ASK is addressed to a person who can actually answer it and who exists in this squad's world - the named reviewer, the release-floor owner, the blocker's owner. 'The team', an unfilled role, or the ticket's assignee named by default when the answer sits elsewhere, all fail. If the right addressee is genuinely unknown, that is itself the question ('who owns the release floor for this queue') and it is addressed to whoever can name them."
+    rationale: "block: naming a person who does not hold the answer is an invented fact wearing a name, and it produces the worst outcome available - the question is asked, nobody who can answer it is asked, and the stall is recorded as escalated. The KM-11720 golden question is the correct shape for an unknown owner."
+
+  - id: solve_is_actually_mechanical
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "Anything typed SOLVE needs no decision from anyone: request the review from a named reviewer, move the ticket to the status it has actually reached, link the dependency someone forgot, draft the release note. Anything that needs a judgement call, a priority call or a person's consent is an ASK, not a SOLVE."
+    rationale: "SKILL.md's SOLVE definition. A SOLVE that quietly contains a decision is how an approval-on-a-list becomes a decision nobody made, and the ship gate assumes SOLVE items are safe to wave through."
+
+  # ---- DETECTION ----
+  - id: stall_reason_from_changelog
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "The one-line why comes from the changelog - when the ticket entered its current status, what the last real transition was, who last acted on it - not from the status field and not guessed. Days in status is computed from the transition date, and a field or label edit is not treated as a status change."
+    rationale: "block: SKILL.md rule 1. A status field says where a ticket is, the changelog says when it got there. Mistaking one for the other has already put a three-week-old event on a plan as though it were yesterday's, and KM-14354 records four separate runs that matched on a label instead of on the row, one of which retracted a correct finding."
+
+  - id: threshold_matched_to_status
+    type: structural
+    severity: normal
+    scope: data
+    statement: "Every surfaced ticket is past the threshold for its own status: Code Review 2d, Ready for release 3d, In Progress 5d, Ready 5d in an active sprint, Blocked 2d. The age shown is days in that status, not ticket age. A Backlog ticket surfaced as a stall fails, because a ticket in Backlog for 90 days is a backlog."
+    rationale: "SKILL.md's threshold table and its opening point that age alone is not a stall. Surfacing on ticket age is how the list fills with things nobody should look at, which is how the whole list stops being read."
+
+  - id: squad_scope_verified
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "Every ticket is in the owner's squad scope, checked against the configured boards or product field rather than assumed from the KM prefix, and is either owned by them or blocking their work."
+    rationale: "SKILL.md rule 2: KM is shared across squads. A stall from another squad is someone else's ask and asking it burns the credibility of the ones that are not."
+
+  # ---- ESCALATION, NOT REPETITION ----
+  - id: carry_count_and_escalation
+    type: structural
+    severity: normal
+    scope: format
+    statement: "Each stall shows how many runs it has been reported ('reported {M}x'), and the ladder is applied at the count shown: at the second report the question also goes to the person's lead, and at three or more a Process finding section states what is structurally broken. A stall on its third report with no process finding fails."
+    rationale: "SKILL.md 'escalate the ask, don't repeat it', and the parent ticket's own acceptance criterion: no item is carried more than three runs without escalating, closing or being parked, and the carry count is visible on every carried item."
+
+  - id: not_repeated_verbatim
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "No stall is restated in the same words as its last report. Either the ask has been escalated, or the line says plainly that it has been asked M times with no answer, which is a different and more serious finding than the stall itself."
+    rationale: "SKILL.md rule 3. The 154-day case was reported accurately every time and closed by nobody, and identical text is what trains the reader to skip the section."
+
+  - id: conscious_decision_excluded
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "The Decision Log was read and any ticket parked or deferred by a conscious decision is not listed as stalled. If the Decision Log could not be read, the output says so at the top rather than treating an unread log as a clear one."
+    rationale: "SKILL.md rule 4: a ticket stalled because of a conscious decision is not stalled. The stale decision_log page id found on 2026-09-01 means an unread or wrong-page log is a live risk, so it has to be declared, not assumed."

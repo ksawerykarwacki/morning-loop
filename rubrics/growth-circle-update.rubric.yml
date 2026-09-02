@@ -61,7 +61,7 @@ checks:
   - id: targets_retrieved_before_tbd
     type: binary_llm
     severity: normal
-    scope: grounding
+    scope: data
     statement: "Every KPI/target cell is either a real figure traced to a source (OKR file, ticket, experiment object) or explicitly 'TBD' because no target exists yet. A blank or a TBD that could have been retrieved is a fail."
     rationale: >
       Same pair. 'TBD' is honest when no target exists (Quick Check, First Message Helper) and lazy

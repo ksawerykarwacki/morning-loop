@@ -1,0 +1,85 @@
+schema_version: 1
+extends: _base
+task: "Implementation kickoff brief for the engineer picking up a ticket - what to build in one paragraph, what has already been decided (verbatim, dated, attributed), what is still open (closed questions with a name), where it touches (paths/endpoints/migrations/flags), and what could not be verified"
+calibration_target: "the engineer starting the ticket at 09:00 can begin work from the brief alone, without reopening the ticket, the Decision Log or two sprints of meeting notes. Audience is the engineer, not a stakeholder: every key, path, endpoint and decision in it is real and checkable."
+created: 2026-09-02
+
+goldens: []
+# No golden shipped yet. ticket-brief is one of the three engineer drafters added in v3.1 and no adopter
+# has reported a brief they used unedited (KM-14354: "I cannot review ticket-brief / ticket-quality-check /
+# stall-escalation at all"). These checks are derived from SKILL.md section by section and from its Rules
+# block, which is the skill's own list of the ways a brief goes wrong. The first brief an engineer starts
+# work from with no edit becomes golden 1: add it and recalibrate.
+
+known_reject:
+  - "A brief that: restates the ticket description as the Building paragraph without naming the endpoint or file it actually means; lists 'the team decided to reuse the mini-profile API' under Already decided with no date, no author and no meeting; invents two acceptance criteria the ticket does not have; names 'src/Service/MiniProfileService.php' as a touch point because that is what such a file would plausibly be called; lists open questions with no person against them; and drops the Not covered here section because everything felt clear. Must fail decisions_verbatim_attributed (block), touch_points_real_not_plausible (block), no_invented_acceptance_criteria (block), open_questions_closed_and_owned, building_paragraph_domain_concrete, and not_covered_named."
+
+checks:
+  # ---- HEADER / IDENTITY ----
+  - id: ticket_key_and_state_real
+    type: structural
+    severity: block
+    scope: data
+    statement: "The KM key in the title is a ticket that exists, and the header line's status, assignee, estimate and sprint are what Jira currently returns for it, not what the brief's body assumes. Where the ticket is a parent story, its real state was read from its subtasks rather than from its own status field."
+    rationale: "block: a brief written against the wrong ticket, or against a status three weeks stale, sends an engineer to work that is already done or not yet unblocked. SKILL.md: parent stories sit in Refinement while the real state lives in subtasks, so never assess a story from its own status alone."
+
+  # ---- BUILDING ----
+  - id: building_paragraph_domain_concrete
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "The Building section is one paragraph in the engineer's own domain terms and resolves at least one thing the ticket left vague to something concrete - the actual endpoint, class, table, queue or flag. A paragraph that is the ticket description reworded fails, because the engineer has already read the ticket."
+    rationale: "SKILL.md question 1 and its worked example: if the ticket says 'reuse the existing mini-profile API', say which endpoint and where it lives. Rewording the description is the failure mode this skill exists to replace."
+
+  - id: fits_one_screen
+    type: structural
+    severity: normal
+    scope: format
+    statement: "The brief fits roughly one screen, Building is a single paragraph, and all five sections are present. If the ticket is too tangled to brief this short, the brief says the ticket needs refinement rather than growing into a page."
+    rationale: "SKILL.md: one paragraph means one paragraph, and an engineer reading this at 09:00 will not read a page. The escape hatch is naming the refinement need, not padding."
+
+  # ---- ALREADY DECIDED ----
+  - id: decisions_verbatim_attributed
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "Every entry under Already decided is quoted verbatim and carries its date, its author and the source it came from (Decision Log entry or a named meeting note), so the reader can open the source. No unattributed 'the team decided', no paraphrase, and no quote attributed to a named person from a summary-level source, which is a paraphrase of a paraphrase."
+    rationale: "block: SKILL.md - an unattributed 'the team decided' is worse than silence, because it will be believed, and paraphrasing a decision is how its meaning drifts. The summary-source clause is the skill's last rule, and the same error was corrected by hand in the 2026-08-19 run (a spoken quote attributed to a named person from a written page)."
+
+  # ---- NOT DECIDED ----
+  - id: open_questions_closed_and_owned
+    type: binary_llm
+    severity: gate
+    scope: data
+    statement: "Every item under Not decided is a closed question (answerable with one fact or a yes/no), names the person who can answer it, and states whether it blocks the work or merely changes it. An open item with no name against it, or an open-ended 'how should we handle X', fails."
+    rationale: "gate: the actionable half of the brief. An unknown with no addressee is the same dead end stall-escalation exists to end, one phase earlier. SKILL.md format mandates the question, the person and the blocks/does-not-block call on every line."
+
+  # ---- TOUCH POINTS ----
+  - id: touch_points_real_not_plausible
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "Every file path, endpoint, migration, table and feature flag named was actually read and exists as written. A plausible-looking path inferred from the ticket's wording is a fail even when the guess is close. Where the ticket does not point at code, the brief says the touch points are unclear and makes that one of the open questions instead of guessing."
+    rationale: "block: a plausible wrong path costs the engineer the exact hour the brief was meant to save, and it is trusted because it looks specific. SKILL.md: read the code only where the ticket points, do not survey the repo, and if the ticket names no API say the touch points are unclear."
+
+  - id: blocking_dependency_classified
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "Each linked ticket that is not yet Done is named by key with an explicit call on whether it blocks this work or merely relates to it. When nothing blocks, the line says so ('Blocked by: nothing') rather than being dropped."
+    rationale: "SKILL.md: check for a blocking dependency and say whether it actually blocks or merely relates. A dropped line reads as 'not checked' and an unclassified link reads as blocked, which parks work that could start."
+
+  # ---- SCOPE DISCIPLINE ----
+  - id: no_invented_acceptance_criteria
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "The brief never supplies acceptance criteria, a success metric or a scope boundary the ticket does not have. A missing AC is named as a gap and handed to ticket-quality-check, never filled with a plausible guess."
+    rationale: "block: SKILL.md rule 1. Inventing AC converts a ticket-quality problem into a hidden assumption with the engineer's name on it, and it is the assumption that gets built. The value the loop is credited with (KM-13401 surfaced as an open question rather than an invention) is exactly this restraint."
+
+  - id: not_covered_named
+    type: structural
+    severity: normal
+    scope: format
+    statement: "The Not covered here section is present and names plainly what could not be verified (a source that was unreachable, an area of the code not read, a decision not found). If genuinely nothing was left unverified it says that; it is never dropped or left empty."
+    rationale: "SKILL.md's last output section. An empty Not covered reads as full coverage, which is the same false-completeness the release exists to end: a gap named is a visible gap, a gap omitted is an invisible one."

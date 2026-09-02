@@ -1,7 +1,7 @@
 # Drafter Rubrics
 
-Per-skill quality rubrics for the morning-loop verify stage (`/morning` Phase 3b). Each drafter skill
-has a rubric here; the judge subagent grades a draft **check by check** (pass/fail + one-sentence reason)
+Per-skill quality rubrics for the morning-loop verify stage (`/morning` Phase 3b). Most drafter skills
+have a rubric here; the judge subagent grades a draft **check by check** (pass/fail + one-sentence reason)
 instead of assigning one vibe score, and the revise loop is handed the *specific* failed checks to fix.
 
 This is Path A of the morning-routine expansion (systems leverage / rubrics-over-prompts). It slots into
@@ -9,9 +9,19 @@ the existing `quality:` machinery in `agent-manager-config.yml` (`bar`, `max_rev
 `stricter_for_external`, independent verifier), it does not replace it.
 
 ## Resolution
-Skill `X` → `06-skills/rubrics/X.rubric.yml`. Every skill rubric **extends `_base.rubric.yml`** (the
-universal checks). If no skill rubric exists, the verifier falls back to `_base` alone. The path root is
-`paths.rubrics_dir` in the config.
+Skill `X` → `rubrics/X.rubric.yml`, and the filename must match the **installed skill name** (the
+`skills/<name>/` directory), not what a config habitually calls it. Every skill rubric
+**extends `_base.rubric.yml`** (the universal checks). If no skill rubric exists, the verifier falls back
+to `_base` alone.
+
+The path root is `paths.rubrics_dir` in the config, and it points at **this directory**: `rubrics/`
+relative to the package root, so `rubrics/` in a standalone clone and `<package>/rubrics/` when the
+package is cloned inside a workspace. A config with no `rubrics_dir` resolves no rubric at all, not even
+the `_base` fallback, so `scripts/doctor.py` reports the missing key rather than guessing a root.
+
+**Coverage.** 11 of the 15 shipped skills have a rubric. `jtbd-capture`, `morning-feedback`,
+`product-pulse` and `sprint-plan` fall back to `_base` alone. That fallback is a real gap, not coverage:
+`_base` grades grounding, completeness, format and the ship test, and nothing job-specific.
 
 ## Schema (per the ladders-of-leverage article)
 ```yaml

@@ -1,0 +1,88 @@
+schema_version: 1
+extends: _base
+task: "Readiness verdict on a ticket before work starts - the skill's 12 named checks each graded pass/fail/n-a with one sentence, split into Blocking (each with an ASK addressed to a named person) and Worth fixing, plus the checks that passed"
+calibration_target: "the engineer about to start the ticket, or about to sit in its refinement: every blocking finding is a question they can send to a named person today and get closed, and no finding is a complaint they have to turn into a question themselves"
+created: 2026-09-02
+
+goldens: []
+# No golden shipped yet. The calibration reference is the run that made this a first-class job: a morning
+# run flagged that KM-13401 had no acceptance criteria and surfaced it as the top open question INSTEAD of
+# inventing them (SKILL.md, "why this exists"). Checks are derived from the 12-check table, the output
+# format and the Rules block. The first readiness report whose blocking ASKs all came back answered
+# becomes golden 1: add it and recalibrate.
+
+known_reject:
+  - "A readiness report that: says NEEDS 3 FIXES but lists two findings; reports 'AC missing' and 'no design linked' with no person against either; writes the missing acceptance criteria itself under a 'suggested AC' heading; marks instrumentation as fail because the event name looked wrong, without an Amplitude read, and reports the same fail again the next day after Amplitude was unreachable; passes decision_conflict without opening the Decision Log; and re-raises a scope_boundary fix the team consciously declined last sprint. Must fail no_gap_filled (block), event_names_verified_not_inferred (block), decision_conflict_checked_against_log (block), every_fail_names_a_person, verdict_matches_findings, unreachable_source_is_na, and waived_not_reraised."
+
+checks:
+  # ---- THE 12 CHECKS, REPORTED HONESTLY ----
+  - id: all_checks_reported
+    type: structural
+    severity: normal
+    scope: format
+    statement: "Each of the skill's 12 checks appears exactly once with a verdict of pass, fail or n/a and one sentence of reason. Failures sit under Blocking or Worth fixing, passes are listed by name only with no commentary, and no check is silently dropped."
+    rationale: "SKILL.md: run each independently and report pass/fail/n-a with one sentence. A dropped check reads as a pass, which is the invisible-gap failure the release is about, and the Passed list is name-only by design so the report stays one screen."
+
+  - id: verdict_matches_findings
+    type: structural
+    severity: normal
+    scope: format
+    statement: "The header verdict reconciles with the body: READY only when no check failed, and NEEDS N FIXES where N equals the number of failed checks actually listed. A count that does not match the list fails."
+    rationale: "The header is the line that gets read and quoted in refinement. A verdict that disagrees with its own body makes every other finding suspect."
+
+  - id: every_fail_names_a_person
+    type: binary_llm
+    severity: gate
+    scope: data
+    statement: "Every failed check ends in an ASK addressed to a named person who can actually clear it, phrased as a closed question. 'AC missing' fails; the skill's own worked example, 'AC missing, ask the person who owns the answer whether partial saves count as completion', passes. The addressee is whoever answers the question, not the ticket's assignee by default. A launch-scaffold ticket is the one exception: it stays addressed to a role and unassigned until the role holder takes it."
+    rationale: "gate: the ship test for this artefact. SKILL.md - a failed check must name the person who can clear it, because a complaint does not close and a question does. The role-not-person exception is the skill's own role_not_person check applied to its own output."
+
+  - id: no_gap_filled
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "The report never writes the missing thing itself. No drafted acceptance criteria, no invented metric or event name, no supplied scope boundary, no guessed estimate, presented as the ticket's content. Pointing at what is needed under Worth fixing is fine; supplying it is not."
+    rationale: "block: SKILL.md rule 1. Writing the missing AC yourself converts a ticket-quality problem into a hidden assumption with your name on it, and the assumption is what gets built. Restraint here is the single clearest piece of value any engineer reported from the loop."
+
+  - id: findings_traced_to_the_ticket
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "Every finding cites the ticket field, comment, link or attachment it was read from, or names the absence it found there. No finding about a field that was never opened, and no claim that a link, mockup or dependency is missing without having looked."
+    rationale: "block: extends base traceable to this artefact. A false blocking finding costs a named person an interruption and teaches the engineer to stop trusting the report, which is worse than no report."
+
+  # ---- SOURCES THAT MAY NOT BE REACHABLE ----
+  - id: unreachable_source_is_na
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "A check whose evidence lives in a source the run could not reach (Amplitude, the Decision Log page, the design tool, a Jira field the token cannot read) reports n/a and names the unreachable source. It does not report fail. The skill's 'default to fail when uncertain' applies to uncertainty about the ticket, never to a tool that was never opened."
+    rationale: "A fail against a source that was not read is a false ASK: it sends a real question to a real person about a gap that may not exist. KM-14354 comment (Daniel Blam): headless Atlassian MCP is often unavailable and sense degrades, so an unreachable source is a normal state and must be reported as one. Amplitude is the common case: instrumentation and metrics_defined go n/a, not fail, when the read did not happen."
+
+  - id: event_names_verified_not_inferred
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "No Amplitude event is asserted to exist, or to be missing, from its name alone. instrumentation and metrics_defined either cite a real Amplitude read or report n/a. An event found to be deliberately withdrawn is recorded as a normal end state, not as a fault."
+    rationale: "block: SKILL.md - verify event existence against Amplitude rather than assuming from the name, because events get renamed and deliberately withdrawn. An invented 'this event does not exist' is an invented fact with a person's name attached to the ask."
+
+  - id: decision_conflict_checked_against_log
+    type: binary_llm
+    severity: block
+    scope: data
+    statement: "decision_conflict is graded against an actual Decision Log read. A fail quotes the rejecting entry with its date; a pass means the log was opened and nothing conflicts. Reporting pass because the log was not consulted fails, and so does asserting a conflict with no entry behind it."
+    rationale: "block: SKILL.md - this is the check that catches the expensive mistakes, because a spec describing a rejected approach gets built as written and nobody re-reads a spec they have already read. It has happened: a screening spec kept describing signals the team had ruled out on legal grounds. Related: the loop found decision_log.current_page_id five weeks stale on 2026-09-01, so a pass on an unread log is a real failure mode, not a hypothetical."
+
+  - id: ac_verdict_turns_on_testability
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "The acceptance_criteria verdict turns on whether the AC can be tested as written, not on whether AC is present. Criteria like 'works well' or 'is fast' fail even though the field is filled; terse criteria that state an observable outcome pass. A fail says which criterion cannot be tested and what would make it testable."
+    rationale: "SKILL.md's own fail condition for this check is 'no AC, or AC that cannot be tested as written'. Grading presence instead of testability is how a ticket passes readiness and then gets argued about in review."
+
+  - id: waived_not_reraised
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "A fix that was consciously declined is recorded as waived and not raised again as a finding. Waived is reported as waived, not as unfixed and not as passed."
+    rationale: "SKILL.md rule 3. Re-reporting a waived check is the same repetition without escalation that let a stall climb from 11 to 154 days, and it is what makes an engineer stop reading the report."

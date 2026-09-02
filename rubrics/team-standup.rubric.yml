@@ -1,0 +1,83 @@
+schema_version: 1
+extends: _base
+task: "Personal standup brief for a developer: their own yesterday/today/blockers update, their sprint tickets as Jira currently returns them, and an Every.to digest whose takeaways are tied to work they actually do"
+calibration_target: "the developer can read their update aloud at standup without editing it, and every ticket key, status and date in it is what Jira returns this morning. Audience is the developer and then their squad, so a wrong status is said out loud to five people."
+created: 2026-09-02
+
+goldens: []
+# No golden shipped yet. team-standup is the daily spine and the most-run drafter in the package, and it
+# was the only routed drafter with no rubric at all: before 2026-09-02 every one of its outputs was graded
+# on _base alone, whose ship test read "it reads as Tomek wrote it" (KM-14354). These checks are derived
+# from commands/team-standup.md phase by phase. The first update a developer reads at standup with no edit
+# becomes golden 1: add it and recalibrate.
+
+known_reject:
+  - "An update that: lists a ticket as In Progress because yesterday's brief said so rather than because Jira says so today; writes 'Yesterday: worked on KM-14449' with no outcome; claims 'Blockers: none' on a day the developer is waiting on VPN access to run a query; pads the Every.to section with 'consider using AI more in your workflow'; and repeats an article that is already in the seen log. Must fail ticket_state_is_todays (block), every_to_ideas_concrete, seen_log_respected, and blockers_are_real."
+
+checks:
+  # ---- TICKETS ----
+  - id: ticket_state_is_todays
+    type: structural
+    severity: block
+    scope: data
+    statement: "Every key, status and updated date in the sprint-tickets table is what the configured JQL returned in THIS run, not carried over from a previous brief. Where the query paged or was truncated, the brief says so rather than presenting a partial list as complete."
+    rationale: "block: this table is read aloud at standup. A stale status is a false statement to the squad, and the label-instead-of-row error class in KM-14354 is exactly this: a value taken from something other than the row it claims to describe."
+
+  - id: only_my_tickets
+    type: structural
+    severity: block
+    scope: data
+    statement: "Every ticket listed is assigned to the named person. The JQL filters on their exact Jira display name, and a ticket that surfaced from a squad-wide or stalled-ticket query is not presented as theirs."
+    rationale: "block: KM is shared across squads, and the 2026-08-19 run log records a Jira probe conflating a stalled-ticket query's nine results with an epic's six subtasks. Someone else's ticket in your update wastes the standup."
+
+  # ---- THE UPDATE ----
+  - id: yesterday_has_outcomes
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Each Yesterday bullet names what moved, not what was touched: a ticket that changed state, a PR opened or merged, a question answered. 'Worked on X' with no outcome fails."
+    rationale: "SKILL.md asks for what was completed or progressed. An update that cannot name movement is the developer's signal that yesterday needs a different sentence, not a vaguer one."
+
+  - id: today_is_committable
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Each Today bullet is something the developer could be held to by tomorrow's standup, and traces to a real ticket or a named piece of work. At most three bullets."
+    rationale: "SKILL.md caps this at 1-3 bullets. A list of five aspirations is not a commitment and the squad cannot use it."
+
+  - id: blockers_are_real
+    type: binary_llm
+    severity: normal
+    scope: data
+    statement: "Blockers says None only when the sensed state supports it. A dependency the brief itself surfaced elsewhere (an unanswered question on one of these tickets, an access or environment gap that is stopping a named task) belongs here, not only in the body."
+    rationale: "The whole point of the blockers line is that someone in the room can clear it. A brief that senses a blocker and then reports None has hidden it from the one audience able to help."
+
+  # ---- EVERY.TO ----
+  - id: seen_log_respected
+    type: structural
+    severity: normal
+    scope: data
+    statement: "No article already recorded in the shared seen log is presented as new, and any article newly digested is appended to it with its date, title and URL."
+    rationale: "SKILL.md: the seen log is committed and shared so the whole team benefits from deduplication. A brief that reads but does not update it silently breaks that for everyone else."
+
+  - id: every_to_ideas_concrete
+    type: binary_llm
+    severity: normal
+    scope: voice
+    statement: "Each 'Ideas for your work' bullet names a specific thing in this developer's world - a real ticket key, a product area, or a tool they use - and a specific action. Generic advice of the 'consider using AI more' shape fails."
+    rationale: "SKILL.md is explicit and gives the contrast itself: not 'consider using AI more' but a named pattern applied to a named ticket. Generic bullets are the reason this section gets skipped."
+
+  - id: every_to_unavailable_says_so
+    type: structural
+    severity: block
+    scope: data
+    statement: "If the Every.to fetch was not attempted or failed, the brief says so as not-run or unavailable. It never renders 'nothing new since last check', which is a positive claim about the source, when the source was never read."
+    rationale: "block: KM-14354's second acceptance criterion. A source that was not attempted is reported as not-run, never as empty. 'Nothing new' and 'I could not look' are different facts and only one of them is honest here."
+
+  # ---- WHOLE ARTEFACT ----
+  - id: reads_aloud_unedited
+    type: binary_llm
+    severity: gate
+    scope: voice
+    statement: "The Your Update section could be read aloud at standup as written: first person, no placeholders, no bracketed instructions, no meta commentary about the brief itself, and no sentence the developer would have to rephrase to say in front of the squad."
+    rationale: "gate: this is the ship test for this artefact. Every other drafter in the package produces something that gets edited before use; this one gets spoken within the hour."
