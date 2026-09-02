@@ -10,7 +10,16 @@ launchd*.log
 *.before-v3.1
 .DS_Store
 
+# a filled-in runner and plist carry your absolute paths. Only the *.template
+# files are shared; the configured copies are yours and must not land here.
+scripts/run-prep.sh
+scripts/run-prep.opencode.sh
+com.morning-loop.prep.plist
+
 # commands/ is the canonical source. A .claude/ inside the package would be a
 # second copy, and would make doctor report commands as installed when they are
 # only sitting in the clone.
 .claude/
+
+# opencode workspace artefacts
+.omo/

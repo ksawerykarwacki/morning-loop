@@ -37,11 +37,32 @@ import pathlib
 import re
 import sys
 
-# Skills load from exactly these two shapes. Everything else is a doc shelf.
-#   <repo>/.claude/skills/<name>/SKILL.md
-#   ~/.claude/skills/<name>/SKILL.md
-LOAD_PATHS = ("{repo}/.claude/skills/{name}/SKILL.md",
-              "{home}/.claude/skills/{name}/SKILL.md")
+# Each client loads skills from its own directory, and a skill installed for the
+# wrong client is invisible in exactly the way this script exists to catch: the
+# file is on disk, the config names it, and it can never resolve. So the client
+# is part of the diagnosis, not an assumption.
+#
+# OpenCode has no separate commands directory -- a skill IS the slash command --
+# so /morning resolves from the same place as every drafter.
+# OpenCode has no separate commands directory -- a skill IS the slash command --
+# so /morning resolves from the same place as every drafter. It takes the skill's
+# identity from the directory name, so `name:` in the frontmatter is conventional
+# rather than required, and doctor does not fail a skill for omitting it: a check
+# that reports a working skill as broken costs more than the one it catches.
+CLIENTS = {
+    "claude": {
+        "skills": ("{repo}/.claude/skills/{name}/SKILL.md",
+                   "{home}/.claude/skills/{name}/SKILL.md"),
+        "commands": ("{repo}/.claude/commands/{name}.md",
+                     "{home}/.claude/commands/{name}.md"),
+    },
+    "opencode": {
+        "skills": ("{repo}/.opencode/skills/{name}/SKILL.md",
+                   "{home}/.config/opencode/skills/{name}/SKILL.md"),
+        "commands": ("{repo}/.opencode/skills/{name}/SKILL.md",
+                     "{home}/.config/opencode/skills/{name}/SKILL.md"),
+    },
+}
 
 # Places a skill is commonly found but can NEVER load from. Listing them is the
 # whole point: "missing" and "in the wrong folder" need different fixes.
@@ -133,30 +154,60 @@ def parse_config(text: str) -> dict:
     return cfg
 
 
-def resolve_skill(name: str, repo: pathlib.Path, home: pathlib.Path) -> dict:
-    for tpl in LOAD_PATHS:
+def detect_client(explicit: str | None) -> str:
+    if explicit:
+        if explicit not in CLIENTS:
+            print(f"✗ unknown client: {explicit} (expected {' or '.join(CLIENTS)})")
+            raise SystemExit(2)
+        return explicit
+    env = os.environ.get("MORNING_CLIENT")
+    if env in CLIENTS:
+        return env
+    home = pathlib.Path.home()
+    if (home / ".claude/skills").is_dir():
+        return "claude"
+    if (home / ".config/opencode").is_dir():
+        return "opencode"
+    return "claude"
+
+
+def resolve_skill(name: str, repo: pathlib.Path, home: pathlib.Path,
+                  client: str = "claude") -> dict:
+    spec = CLIENTS[client]
+    for tpl in spec["skills"]:
         p = pathlib.Path(tpl.format(repo=repo, home=home, name=name))
         if p.is_file():
             return {"state": "ok", "at": str(p)}
     # A routing rule may legitimately name a COMMAND rather than a skill: the
     # daily spine reuses /standup. Those resolve from a different directory, and
     # reporting them as MISSING was doctor's own first false positive.
-    for base in (repo, home):
-        p = base / ".claude/commands" / f"{name}.md"
+    for tpl in spec["commands"]:
+        p = pathlib.Path(tpl.format(repo=repo, home=home, name=name))
         if p.is_file():
             return {"state": "ok (command)", "at": str(p)}
+    # Installed, but for a client you are not running. Same file, same name, and
+    # it can never resolve -- which is the wrong-folder case across clients.
+    for other, ospec in CLIENTS.items():
+        if other == client:
+            continue
+        for tpl in ospec["skills"]:
+            p = pathlib.Path(tpl.format(repo=repo, home=home, name=name))
+            if p.is_file():
+                return {"state": "NOT LOADABLE", "at": str(p),
+                        "fix": f"installed for {other}, but you are running {client}. "
+                               f"Re-run ./scripts/install-skills.sh --client={client}"}
     for tpl in DECOY_PATHS:
         p = pathlib.Path(tpl.format(repo=repo, home=home, name=name))
         if p.is_file():
+            target = pathlib.Path(spec["skills"][1].format(repo=repo, home=home, name=name))
             return {"state": "NOT LOADABLE", "at": str(p),
-                    "fix": f"mkdir -p ~/.claude/skills/{name} && "
-                           f"cp '{p}' ~/.claude/skills/{name}/SKILL.md"}
+                    "fix": f"mkdir -p {target.parent} && cp '{p}' {target}"}
     return {"state": "MISSING", "at": None,
             "fix": f"no file named {name} anywhere. Either write the skill, or "
                    f"comment the rule out so it stops looking like coverage."}
 
 
-def check_frontmatter(path: str) -> str | None:
+def check_frontmatter(path: str, client: str = "claude") -> str | None:
     """A SKILL.md without frontmatter loads as a file, not as a skill."""
     try:
         head = pathlib.Path(path).read_text(encoding="utf-8", errors="replace")[:400]
@@ -174,11 +225,14 @@ def main() -> int:
     ap.add_argument("--config")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--repo")
+    ap.add_argument("--client", choices=sorted(CLIENTS),
+                    help="which client's load paths to check (default: detect)")
     args = ap.parse_args()
 
     here = pathlib.Path(__file__).resolve().parent
     repo = pathlib.Path(args.repo).expanduser() if args.repo else repo_root(here)
     home = pathlib.Path.home()
+    client = detect_client(args.client)
 
     cfg_path = find_config(repo, args.config)
     if not cfg_path:
@@ -199,9 +253,9 @@ def main() -> int:
                             "note": "no skill: handled inside the command"})
             continue
         for name in (skills if isinstance(skills, list) else [skills]):
-            r = resolve_skill(name, repo, home)
+            r = resolve_skill(name, repo, home, client)
             if r["state"] == "ok":
-                fm = check_frontmatter(r["at"])
+                fm = check_frontmatter(r["at"], client)
                 if fm:
                     r = {"state": "NOT LOADABLE", "at": r["at"],
                          "fix": f"{r['at']} has a problem: {fm}. A SKILL.md without "
@@ -213,8 +267,9 @@ def main() -> int:
     # The other half of Xitong's half-adopt: the command itself.
     cmd_states = []
     for cmd in ("morning", "standup"):
-        installed = [str(p) for p in (repo / ".claude/commands" / f"{cmd}.md",
-                                      home / ".claude/commands" / f"{cmd}.md") if p.is_file()]
+        installed = [str(p) for p in
+                     (pathlib.Path(tpl.format(repo=repo, home=home, name=cmd))
+                      for tpl in CLIENTS[client]["commands"]) if p.is_file()]
         if installed:
             cmd_states.append({"command": f"/{cmd}", "state": "ok", "at": installed[0]})
             continue
@@ -226,7 +281,8 @@ def main() -> int:
                    if p.is_file()]
         if shipped:
             cmd_states.append({"command": f"/{cmd}", "state": "NOT INSTALLED", "at": shipped[0],
-                               "fix": "run ./scripts/install-skills.sh (it installs commands too)"})
+                               "fix": f"run ./scripts/install-skills.sh --client={client} "
+                                      f"(it installs commands too)"})
         else:
             cmd_states.append({"command": f"/{cmd}", "state": "MISSING", "at": None,
                                "fix": "not in this package either. Pull the latest package."})
@@ -250,12 +306,13 @@ def main() -> int:
                                 "at": str(p)})
 
     if args.json:
-        print(json.dumps({"config": str(cfg_path), "parsed_by": cfg.get("_parsed_by", "yaml"),
+        print(json.dumps({"config": str(cfg_path), "client": client,
+                          "parsed_by": cfg.get("_parsed_by", "yaml"),
                           "rules": results, "commands": cmd_states, "paths": paths_state,
                           "blocked": blocked}, indent=2))
         return 1 if blocked else 0
 
-    print(f"\nMORNING LOOP DOCTOR\nconfig: {cfg_path}")
+    print(f"\nMORNING LOOP DOCTOR\nclient: {client}\nconfig: {cfg_path}")
     if cfg.get("_parsed_by"):
         print("note:   PyYAML not installed, using the narrow fallback parser. "
               "Install PyYAML for a stricter read.")

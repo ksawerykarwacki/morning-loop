@@ -10,6 +10,13 @@ WORKDIR="<PATH TO YOUR REPO>"   # FILL
 LOG="$WORKDIR/05-automation/agent-manager/launchd.log"
 cd "$WORKDIR" || { echo "$(date) FAILED cd $WORKDIR" >> "$LOG"; exit 1; }
 
+# Hold the machine awake for the whole run. A launchd DarkWake gives roughly 45
+# seconds before macOS returns to sleep and kills everything: on 2026-08-20 the
+# run fired at 08:01:04 and the machine slept at 08:01:49, producing nothing and
+# reporting nothing until the lid opened. -w ties the assertion to this script's
+# pid, so it retires on its own without needing cleanup on every exit path.
+caffeinate -i -w $$ &
+
 echo "===== $(date '+%Y-%m-%d %H:%M:%S') starting /morning --prep =====" >> "$LOG"
 
 # --print: headless, single-shot. --permission-mode acceptEdits lets it write the
@@ -26,11 +33,16 @@ CLAUDE_PID=$!
 ( sleep 1200; kill -0 "$CLAUDE_PID" 2>/dev/null && {
     echo "watchdog: prep exceeded 20 min, killing $CLAUDE_PID" >> "$LOG"
     kill -TERM "$CLAUDE_PID" 2>/dev/null
-  } ) &
+  } ) >>"$LOG" 2>&1 &
 WATCHDOG_PID=$!
 wait "$CLAUDE_PID"
 
 STATUS=$?
+# Reap the sleep BEFORE its parent: killing the subshell alone orphans the sleep,
+# which keeps an inherited stdout open and makes anything waiting on this script
+# block for the full 20 minutes after the run has already finished. The explicit
+# redirect above is the other half - without it the watchdog holds the caller's pipe.
+pkill -P "$WATCHDOG_PID" 2>/dev/null
 kill "$WATCHDOG_PID" 2>/dev/null      # run finished in time; retire the watchdog
 echo "===== $(date '+%Y-%m-%d %H:%M:%S') claude finished (exit $STATUS) =====" >> "$LOG"
 
