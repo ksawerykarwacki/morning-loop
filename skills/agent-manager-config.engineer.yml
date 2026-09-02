@@ -1,7 +1,7 @@
 # Agent-Manager Config: ENGINEER PROFILE
 # ---------------------------------------------------------------------------
 # Copy this instead of the generic template if you write code. It is pre-routed
-# for engineering work, so adoption is: fill the 5 fields marked FILL, run it.
+# for engineering work, so adoption is: fill the 7 fields marked FILL, run it.
 #
 # Why this exists: three developers adopted v1 and the package shipped ZERO
 # drafters that served them, so one of them had to write his own. That was the
@@ -151,12 +151,49 @@ health:
   alert_on_miss: same_as_delivery
 
 # ---------------------------------------------------------------------------
+# Dispatch: does the unattended prep DRAFT your SOLVE items, or only plan?
+# ---------------------------------------------------------------------------
+dispatch:
+  predraft_in_prep: false           # ships OFF: present and explicit, not absent
+  max_predrafts: 3                  # cost ceiling when it is on: most items drafted per prep run
+
+  # What turning `predraft_in_prep: true` on does: Phase 2p runs the day's SOLVE
+  # items through the normal draft -> independent verify -> revise pipeline while
+  # nobody is watching, so you sit down to graded drafts instead of a to-do list.
+  # It only ever writes local files, under `paths.review_dir`. It ships nothing.
+  # Shipping externally stays gated per item by `permissions.never_auto` and
+  # `permissions.gated_at_morning_approval`, exactly as it is with this off.
+  # Turning it on does NOT require loosening any permission. Phase 2p gates on
+  # `dispatch.predraft_in_prep` alone (commands/morning.md:345) and references no
+  # `permissions.*` key; morning.md:23 is explicit that "shipping is the only
+  # thing that ever was" gated. `never_auto` is untouched by this phase.
+  #
+  # KNOWN INCONSISTENCY, flagged for the package author, do not silently fix by
+  # editing your own permissions: `gated_at_morning_approval` below still reads
+  # `[run_drafting_subagents]`, which is the v2 model. The v3 work log of
+  # 2026-08-19 records "run_local_drafting_subagents moved to unattended_allowed;
+  # gated_at_morning_approval is now ship_any_draft_externally" — neither string
+  # exists anywhere in this package. So the config still gates drafting while the
+  # command treats drafting as unattended-allowed. Until that is reconciled
+  # upstream, read the command as authoritative and leave the list as shipped.
+  #
+  # Still leave `predraft_in_prep: false` until you have watched a prep run you
+  # trust. It is a cost and quality decision, not a safety one.
+
+# ---------------------------------------------------------------------------
 # Permissions. Do not loosen these. Sense, plan and deliver run unattended;
 # drafting is gated at the morning gate; nothing reaches Jira without a per-item
 # yes, even after you approve the gate.
 # ---------------------------------------------------------------------------
 permissions:
-  unattended_allowed: [read_jira, read_confluence, read_meeting_transcripts, read_web, write_local_files, deliver_brief_to_self]
+  unattended_allowed: [read_jira, read_confluence, read_meeting_transcripts, read_amplitude, read_web, write_local_files, deliver_brief_to_self]
+  # `read_amplitude` is here because ticket-quality-check verifies that a named
+  # success metric's event exists rather than assuming it from the name, and the
+  # grader defaults to `fail` when it cannot check. Without it those checks fail
+  # every run for a reason that has nothing to do with the ticket.
+  # `read_own_email` is deliberately NOT here: no rule in this profile reads mail,
+  # and an unused read scope only widens what runs with nobody watching. Add it
+  # the day you add a rule that needs it.
   gated_at_morning_approval: [run_drafting_subagents]
   never_auto: [create_or_edit_jira_issue, publish_or_edit_confluence, post_to_mattermost, send_any_external_message]
 
@@ -178,4 +215,7 @@ paths:
   review_dir: "01-sprint-operations/current/agent-drafts/{DATE}/"
   run_log: "05-automation/agent-manager/run-log.md"
   meeting_notes_dir: "10-meeting-notes/"
+  rubrics_dir: "rubrics/"              # package root, where the shipped rubrics live. Resolved from the
+                                       # root the loop found, so prefix the clone folder (e.g.
+                                       # "morning-loop/rubrics/") if the package sits inside a workspace.
   brief_index: "05-automation/agent-manager/brief-index.json"

@@ -1,9 +1,15 @@
 # Agent-Manager Routing Config — TEMPLATE (copy me, don't run me)
+# DUPLICATE, kept for compatibility with older instructions that point here.
+# The canonical copy is  agent-manager-config.template.yml  in the package root;
+# both files carry the same content, so copy either one.
 # ---------------------------------------------------------------------------
 # This is the L2-reusable template behind /morning. To adopt the daily loop:
-#   1. Copy this file to  06-skills/skills/agent-manager-config.yml
+#   1. Copy this file to  agent-manager-config.<you>.yml  in the PACKAGE ROOT.
+#      That is the path doctor.py and the loop resolve in a clone. (In the PO
+#      workspace layout the equivalent is 06-skills/skills/agent-manager-config.<you>.yml;
+#      keep it anywhere else and point $MORNING_CONFIG at it.)
 #   2. Fill every  <PLACEHOLDER>  and the FILL-ME blocks below with YOUR values.
-#   3. Read ADOPT-MORNING.md (same folder as this repo's agent-manager) for setup.
+#   3. Read ADOPT-MORNING.md in the package root for setup.
 # The /morning command logic is generic and reads THIS file — you never edit the
 # command, only your config. That copy-and-fill is the whole reusability bar.
 # Every place you see  # FILL:  is a decision only you can make about your role.
@@ -193,6 +199,36 @@ health:
   # artifact. This check caught a briefing that had silently failed twice.
 
 # ---------------------------------------------------------------------------
+# Dispatch: does the unattended prep DRAFT the day's SOLVE items, or only plan?
+# ---------------------------------------------------------------------------
+dispatch:
+  predraft_in_prep: false           # ships OFF: present and explicit, not absent
+  max_predrafts: 3                  # cost ceiling when it is on: most items drafted per prep run
+
+  # What turning `predraft_in_prep: true` on does: Phase 2p runs the day's SOLVE
+  # items through the normal draft -> independent verify -> revise pipeline while
+  # nobody is watching, so you sit down to graded drafts instead of a to-do list.
+  # It only ever writes local files, under `paths.review_dir`. It ships nothing.
+  # Shipping externally stays gated per item by `permissions.never_auto` and
+  # `permissions.gated_at_morning_approval`, exactly as it is with this off.
+  # Turning it on does NOT require loosening any permission. Phase 2p gates on
+  # `dispatch.predraft_in_prep` alone (commands/morning.md:345) and references no
+  # `permissions.*` key; morning.md:23 is explicit that "shipping is the only
+  # thing that ever was" gated. `never_auto` is untouched by this phase.
+  #
+  # KNOWN INCONSISTENCY, flagged for the package author, do not silently fix by
+  # editing your own permissions: `gated_at_morning_approval` below still reads
+  # `[run_drafting_subagents]`, which is the v2 model. The v3 work log of
+  # 2026-08-19 records "run_local_drafting_subagents moved to unattended_allowed;
+  # gated_at_morning_approval is now ship_any_draft_externally" — neither string
+  # exists anywhere in this package. So the config still gates drafting while the
+  # command treats drafting as unattended-allowed. Until that is reconciled
+  # upstream, read the command as authoritative and leave the list as shipped.
+  #
+  # Still leave `predraft_in_prep: false` until you have watched a prep run you
+  # trust. It is a cost and quality decision, not a safety one.
+
+# ---------------------------------------------------------------------------
 # Permission policy — the safety contract. DO NOT loosen these.
 # Sense + Plan + Deliver run unattended. Dispatch is gated at the morning gate.
 # Anything leaving the workspace is re-confirmed per item, even after approval.
@@ -244,3 +280,7 @@ paths:
   decision_queue: "01-sprint-operations/current/needs-decision-{DATE}.md"
   run_log: "05-automation/agent-manager/run-log.md"
   meeting_notes_dir: "10-meeting-notes/"    # ceremony_capture writes one file per sensed meeting
+  rubrics_dir: "rubrics/"                   # package root, where the shipped rubrics live: Phase 3b reads
+                                            # {rubrics_dir}/{skill}.rubric.yml. Resolved from the root the
+                                            # loop found, so prefix the clone folder (e.g. "morning-loop/
+                                            # rubrics/") if the package sits inside a bigger workspace.
