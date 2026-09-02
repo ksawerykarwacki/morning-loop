@@ -128,8 +128,16 @@ Every delivery writes `05-automation/agent-manager/delivery-receipts/{date}.json
 cat 05-automation/agent-manager/delivery-receipts/$(date +%F).json
 ```
 
-- `"status": "sent"` with a timestamp means it landed.
-- `"status": "failed"` carries the verbatim error.
+- `"status": "sent"` with a `sent_at` timestamp means it landed on the channel.
+- `"status": "rendered_not_sent"` means `channel: file` wrote the page and sent
+  nothing. The brief exists and `sent_at` is null. This is a success, not a miss.
+- `"status": "dry_run"` means `--dry-run` produced no artefact at all.
+- `"status": "failed"` carries the verbatim error, and `"crashed"` an unexpected one.
+- A receipt already recording `sent` or `rendered_not_sent` is never downgraded by a
+  later failure on the same date: the failure lands in `last_error` instead, so the
+  evidence that the brief reached you survives a second channel or a Ctrl-C.
+- If receipts are not landing where your config points, pass `--root` (or set
+  `MORNING_ROOT`) to state the artefact root instead of letting it be inferred.
 - **No receipt at all on a working day means the run never got that far.** That is the case the HEALTH phase reports rather than shrugging at, and it is the exact failure that let a routine here run for nine weekdays while delivering nothing.
 
 `run-prep.sh` also carries a shell-level safety net: if there is no `sent` receipt by the end of the run, it delivers the brief itself. Delivery is the whole point of the loop, so it does not depend on the model remembering to call a script. It is idempotent, so a brief already delivered is never delivered twice.

@@ -83,7 +83,10 @@ alert_on_miss() {
     > "$WORKDIR/05-automation/agent-manager/delivery-receipts/$TODAY.json"
 }
 
-if grep -q '"status": "sent"' "$RECEIPT" 2>/dev/null; then
+# `sent` covers macos and mattermost. `rendered_not_sent` is what `delivery.channel:
+# file` records, because rendering the page delivers the brief without sending
+# anything. Both mean today's brief already exists and must not be redone.
+if grep -qE '"status": "(sent|rendered_not_sent)"' "$RECEIPT" 2>/dev/null; then
   echo "delivery: already delivered today, nothing to do" >> "$LOG"
 elif [ ! -f "$PLAN" ]; then
   # The run never produced a brief. Diagnose WHY from what claude actually said,

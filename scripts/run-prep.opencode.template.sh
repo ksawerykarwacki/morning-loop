@@ -95,7 +95,10 @@ alert_on_miss() {
     "$TODAY" "$reason" "$detail" "$(date '+%Y-%m-%dT%H:%M:%S%z')" > "$RECEIPT"
 }
 
-if grep -q '"status": "sent"' "$RECEIPT" 2>/dev/null; then
+# `sent` covers macos and mattermost. `rendered_not_sent` is what `delivery.channel:
+# file` records, because rendering the page delivers the brief without sending
+# anything. Both mean today's brief already exists and must not be redone.
+if grep -qE '"status": "(sent|rendered_not_sent)"' "$RECEIPT" 2>/dev/null; then
   echo "delivery: already delivered today, nothing to do" >> "$LOG"
 elif [ ! -f "$PLAN" ]; then
   # Diagnose WHY from what opencode actually said, because "it didn't run" is
