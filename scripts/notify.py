@@ -18,10 +18,23 @@ Channels, cheapest first:
 
 Usage:
   notify.py --brief <plan.md> [--channel macos|mattermost|file] [--date Y-M-D]
-            [--webhook URL] [--no-open] [--dry-run]
+            [--webhook URL] [--no-open] [--dry-run] [--root PATH]
 
-Exit: 0 delivered · 2 config error · 3 delivery failed
+Exit: 0 done · 2 config error · 3 delivery failed · 130 interrupted
+
 A receipt is ALWAYS written, so HEALTH can tell "failed" from "never attempted".
+That is a promise, not an aspiration: the receipt is built before anything that
+can fail, every failure path writes it, and an unexpected exception or a Ctrl-C
+writes it on the way out. Receipt statuses:
+
+  sent               delivered, `sent_at` set
+  rendered_not_sent  the page exists, nothing was delivered (channel `file`)
+  dry_run            the page was rendered, the send was only described
+  failed             carries the verbatim `error`
+
+A `sent` receipt is never overwritten by a worse one, because run-prep greps
+the receipt to decide whether to re-deliver and a downgraded receipt would make
+it send today's brief twice.
 """
 
 from __future__ import annotations
@@ -40,29 +53,100 @@ import urllib.request
 
 HERE = pathlib.Path(__file__).resolve().parent
 
-# Two layouts ship this script: workspace (scripts/ is 3 levels under the root)
-# and standalone package (1 level). Guessing wrong is silent -- it wrote receipts
-# to a sibling of the repo, where the health check that reads them cannot look.
-if (HERE.parent / "briefs").is_dir() or any(HERE.parent.glob("agent-manager-config*.yml")):
-    REPO = HERE.parent
-    ARTIFACTS = REPO / "briefs"
-    RENDER_DIR = ARTIFACTS / "rendered"
-else:
-    REPO = HERE.parents[2]
-    ARTIFACTS = REPO / "05-automation/agent-manager"
-    RENDER_DIR = ARTIFACTS / "briefs"
+PACKAGE_ROOT = HERE.parent
 
+# THREE layouts ship this script and the depth of scripts/ under the artefact
+# root differs in each, so the root has to be probed rather than counted:
+#
+#   standalone clone          <clone>/scripts/notify.py                depth 1
+#   package copied into a     <ws>/05-automation/agent-manager/
+#     workspace subtree         scripts/notify.py                      depth 3
+#   package cloned as a       <ws>/morning-loop/scripts/notify.py      depth 2
+#     workspace subdirectory
+#
+# Probe for the ARTEFACT ROOT: the directory that owns the trees the config's
+# paths are written against and that the Phase 2c health check reads receipts
+# from. Do NOT pattern-match on a config file, which is what the earlier probe
+# did. The package ships agent-manager-config.template.yml at its own root, so
+# `glob("agent-manager-config*.yml")` is true in EVERY clone, the package branch
+# always won and the workspace branch was unreachable dead code. In the third
+# layout that put receipts at <clone>/briefs/ inside the git clone while the
+# workspace directory the config points at stayed empty.
+#
+# Guessing wrong is silent, so `--root` always wins and the resolved root is
+# printed on success. A wrong root should be visible, not discovered in March.
+WORKSPACE_MARKERS = ("05-automation/agent-manager", "01-sprint-operations")
+
+
+def find_workspace_root(start: pathlib.Path) -> pathlib.Path | None:
+    """Nearest ancestor that owns a workspace artefact tree, or None.
+
+    Walks up the way doctor.py does for its own root, but keys on the artefact
+    directories instead of `.git`, because in the third layout the git root IS
+    the package clone and the artefacts belong one level above it.
+    """
+    for p in [start, *start.parents]:
+        if any((p / m).is_dir() for m in WORKSPACE_MARKERS):
+            return p
+    return None
+
+
+def artefact_paths(root: pathlib.Path) -> tuple[str, pathlib.Path, pathlib.Path]:
+    """(layout name, artefacts dir, render dir) for an already-resolved root."""
+    if any((root / m).is_dir() for m in WORKSPACE_MARKERS):
+        artifacts = root / "05-automation" / "agent-manager"
+        return "workspace", artifacts, artifacts / "briefs"
+    artifacts = root / "briefs"
+    return "package", artifacts, artifacts / "rendered"
+
+
+REPO = PACKAGE_ROOT
+LAYOUT = "package"
+ARTIFACTS = REPO / "briefs"
+RENDER_DIR = ARTIFACTS / "rendered"
 INDEX = ARTIFACTS / "brief-index.json"
 RECEIPTS = ARTIFACTS / "delivery-receipts"
 
 
-def die(code: int, msg: str, receipt: dict | None = None) -> None:
+def configure_roots(explicit: str | None = None) -> None:
+    global REPO, LAYOUT, ARTIFACTS, RENDER_DIR, INDEX, RECEIPTS
+    if explicit:
+        REPO = pathlib.Path(explicit).expanduser().resolve()
+        if not REPO.is_dir():
+            # Not fatal: the writes below mkdir their parents, and dying here
+            # would be the one failure path with nowhere to leave a receipt.
+            print(f"notify: --root does not exist yet, will create under {REPO}",
+                  file=sys.stderr)
+    else:
+        REPO = find_workspace_root(HERE) or PACKAGE_ROOT
+    LAYOUT, ARTIFACTS, RENDER_DIR = artefact_paths(REPO)
+    INDEX = ARTIFACTS / "brief-index.json"
+    RECEIPTS = ARTIFACTS / "delivery-receipts"
+
+
+configure_roots()
+
+# The in-progress receipt. Built before anything that can fail, so that every
+# exit path -- die(), an unexpected exception, a Ctrl-C -- has one to write.
+RECEIPT: dict | None = None
+
+
+def record_failure(msg: str, **extra: object) -> None:
+    """Leave a `failed` receipt carrying whatever we know so far."""
+    if RECEIPT is None:
+        return
+    try:
+        write_receipt(RECEIPT | {"status": "failed", "error": msg} | dict(extra))
+    except OSError as e:
+        print(f"notify: could not even write the failure receipt: {e}", file=sys.stderr)
+
+
+def die(code: int, msg: str, **extra: object) -> None:
     """Fail loudly AND leave a receipt. A failure with no artifact is
     indistinguishable from never having run, which is the whole bug class this
     loop exists to avoid."""
     print(f"notify: {msg}", file=sys.stderr)
-    if receipt is not None:
-        write_receipt(receipt | {"status": "failed", "error": msg})
+    record_failure(msg, **extra)
     raise SystemExit(code)
 
 
@@ -92,8 +176,26 @@ def assign_id(idx: dict, date: str, brief_path: str, subject: str) -> int:
 
 
 def write_receipt(rec: dict) -> None:
+    """Write today's receipt, but NEVER downgrade a good one.
+
+    Once the brief has reached the person, that evidence outlives whatever
+    happens next: a second channel that fails, a watchdog kill, a Ctrl-C. It is
+    also load-bearing rather than tidy, because run-prep greps this file for
+    `"status": "sent"` to decide whether to re-deliver, so a downgraded receipt
+    would send today's brief a second time.
+    """
     RECEIPTS.mkdir(parents=True, exist_ok=True)
-    (RECEIPTS / f"{rec['date']}.json").write_text(json.dumps(rec, indent=2) + "\n")
+    out = RECEIPTS / f"{rec['date']}.json"
+    if rec.get("status") != "sent" and out.exists():
+        try:
+            prior = json.loads(out.read_text())
+        except (json.JSONDecodeError, OSError):
+            prior = None
+        if isinstance(prior, dict) and prior.get("status") == "sent":
+            print(f"notify: today's brief is already recorded as delivered, keeping that "
+                  f"receipt instead of writing '{rec.get('status')}'", file=sys.stderr)
+            return
+    out.write_text(json.dumps(rec, indent=2) + "\n")
 
 
 # --------------------------------------------------------------------------- md -> html
@@ -332,8 +434,19 @@ def notify_macos(summary: dict, html: pathlib.Path, bid: int | None,
     except (OSError, subprocess.SubprocessError) as e:
         die(3, f"could not send the macOS notification: {e}")
     if open_brief:
-        # -g opens without stealing focus, so a 07:52 run does not hijack the screen
-        subprocess.run(["open", "-g", str(html)], capture_output=True, timeout=20)
+        # -g opens without stealing focus, so a 07:52 run does not hijack the screen.
+        # The return code is checked: half a delivery reported as a whole one is the
+        # exact dishonesty this script exists to avoid. The receipt records that the
+        # notification itself did land, so the failure stays diagnosable.
+        try:
+            r = subprocess.run(["open", "-g", str(html)],
+                               capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.SubprocessError) as e:
+            die(3, f"notification sent, but the brief page could not be opened: {e}",
+                notification_sent=True)
+        if r.returncode != 0:
+            die(3, f"notification sent, but `open` failed (exit {r.returncode}): "
+                   f"{r.stderr.strip() or html}", notification_sent=True)
 
 
 def notify_mattermost(summary: dict, md: str, bid: int | None,
@@ -364,6 +477,8 @@ def notify_mattermost(summary: dict, md: str, bid: int | None,
 
 # --------------------------------------------------------------- main
 def main() -> int:
+    global RECEIPT
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--brief", required=True)
     ap.add_argument("--channel", default=os.environ.get("MORNING_NOTIFY_CHANNEL", "macos"),
@@ -372,48 +487,94 @@ def main() -> int:
     ap.add_argument("--webhook", default=os.environ.get("MORNING_MATTERMOST_WEBHOOK"))
     ap.add_argument("--no-open", action="store_true", help="don't open the rendered brief")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--root", default=os.environ.get("MORNING_ROOT"),
+                    help="artefact root. Overrides the layout probe; use it when the "
+                         "receipts are not landing where your config points.")
     a = ap.parse_args()
+
+    configure_roots(a.root)
+
+    # Build the receipt FIRST, on the least information that makes it useful: a
+    # date and where it will be written. Everything after this point can fail,
+    # and from here on every one of those failures leaves an artifact behind.
+    date = a.date or dt.date.today().isoformat()
+    RECEIPT = {
+        "date": date, "brief_id": None, "channel": a.channel,
+        "root": str(REPO), "layout": LAYOUT,
+        "brief_file": a.brief, "rendered": None,
+        "subject": f"☀️ Morning Brief · {date}",
+        "counts": None, "top": None,
+        "sent_at": None, "message_id": None,
+    }
 
     path = pathlib.Path(a.brief)
     if not path.is_absolute():
         path = REPO / path
+    RECEIPT["brief_file"] = str(path)
     if not path.exists():
         die(2, f"brief file not found: {path}")
     md = path.read_text()
     if not md.strip():
         die(2, f"brief file is empty: {path}")
 
-    date = a.date or dt.date.today().isoformat()
     bid = assign_id(load_index(), date, str(path), f"Morning Brief {date}")
     summary = summarise(md)
     html = render_html(md, date, bid)
 
-    receipt = {
-        "date": date, "brief_id": bid, "channel": a.channel,
-        "brief_file": str(path), "rendered": str(html),
+    RECEIPT |= {
+        "brief_id": bid, "rendered": str(html),
         "subject": f"☀️ Morning Brief #{bid} · {date}",
         "counts": summary["counts"], "top": summary["top"],
-        "sent_at": None, "message_id": None,
     }
 
     if a.channel == "macos":
         notify_macos(summary, html, bid, not a.no_open, a.dry_run)
     elif a.channel == "mattermost":
         if not a.webhook:
-            die(2, "no webhook. Pass --webhook or set MORNING_MATTERMOST_WEBHOOK.", receipt)
+            die(2, "no webhook. Pass --webhook or set MORNING_MATTERMOST_WEBHOOK.")
         notify_mattermost(summary, md, bid, a.webhook, a.dry_run)
 
-    status = "dry_run" if a.dry_run else "sent"
-    write_receipt(receipt | {
+    # `file` renders a page and delivers nothing, so it must not claim `sent`.
+    # A receipt that says "sent" for a channel that sent nothing is how a brief
+    # nobody ever saw gets counted as a delivered one.
+    if a.dry_run:
+        status, delivered = "dry_run", False
+    elif a.channel == "file":
+        status, delivered = "rendered_not_sent", False
+    else:
+        status, delivered = "sent", True
+
+    write_receipt(RECEIPT | {
         "status": status,
-        "sent_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "sent_at": (dt.datetime.now().astimezone().isoformat(timespec="seconds")
+                    if delivered else None),
     })
-    print(f"notify: brief #{bid} for {date} delivered via {a.channel} "
+    if delivered:
+        verb = f"delivered via {a.channel}"
+    elif a.dry_run:
+        verb = f"rendered, send only DESCRIBED (dry run, {a.channel})"
+    else:
+        verb = f"rendered, NOT delivered ({a.channel})"
+    print(f"notify: brief #{bid} for {date} {verb} "
           f"({summary['counts']['drafts']} to draft, {summary['counts']['asks']} asks, "
           f"{summary['counts']['your_turn']} your turn)")
+    print(f"        root:     {REPO}  [{LAYOUT} layout]")
     print(f"        rendered: {html}")
+    print(f"        receipt:  {RECEIPTS / (date + '.json')}")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # The receipt promise has to survive the paths nobody wrote on purpose too:
+    # an unhandled exception and a watchdog's Ctrl-C both used to leave nothing
+    # at all, which reads downstream as "never attempted".
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        record_failure("interrupted before delivery finished")
+        raise SystemExit(130)
+    except BaseException as e:
+        record_failure(f"unexpected {type(e).__name__}: {e}")
+        raise
