@@ -35,7 +35,8 @@
 # Usage:
 #   ./scripts/install-skills.sh                    # detect client, install to its skills dir
 #   ./scripts/install-skills.sh --client=opencode  # force a client (claude | opencode)
-#   ./scripts/install-skills.sh --repo             # install into this repo instead of $HOME
+#   ./scripts/install-skills.sh --repo             # install into the load path of the
+#                                                  # workspace this clone sits in
 #   ./scripts/install-skills.sh --dry-run          # show what would happen, touch nothing
 #
 # MORNING_CLIENT=opencode is honoured too, for the scheduled runner.
@@ -48,16 +49,39 @@ DRY=0
 REPO_SCOPE=0
 CLIENT="${MORNING_CLIENT:-auto}"
 
+# Resolve the root whose load path actually loads. The git root is right for a
+# standalone clone and WRONG when the package is cloned inside a workspace, which
+# is the layout ADOPT-MORNING.md blesses: then the git root is the package, and
+# <package>/.claude/skills is a folder nothing loads from, as the package's own
+# .gitignore says. So probe the layout for a workspace above the clone instead of
+# counting parents. doctor.py's repo_root() makes the same two probes, and the two
+# have to agree or the installer writes where the doctor does not look.
+#
+# The probe runs from $PKG, not from wherever you stand: asking git about $PWD
+# answers about an unrelated repo when this is invoked by absolute path.
+resolve_root() {
+  local root up
+  root="$(cd "$PKG" && git rev-parse --show-toplevel 2>/dev/null)"
+  [ -n "$root" ] || root="$PKG"
+  if [ -d "$root/commands" ] && [ -d "$root/skills" ] && [ -f "$root/scripts/doctor.py" ]; then
+    up="${root:h}"
+    while [ "$up" != "/" ] && [ "$up" != "$HOME" ]; do
+      if [ -d "$up/06-skills" ] || [ -d "$up/05-automation" ] || [ -d "$up/.claude" ]; then
+        echo "$up"; return 0
+      fi
+      up="${up:h}"
+    done
+  fi
+  echo "$root"
+}
+
 for arg in "$@"; do
   case "$arg" in
-    # --repo installs into the git root of wherever you are, not a fixed number of
-    # levels above the package. The old form assumed the workspace layout and walked
-    # outside the repo entirely when the package was cloned standalone.
     --repo)     REPO_SCOPE=1 ;;
     --dry-run)  DRY=1 ;;
     --client=*) CLIENT="${arg#--client=}" ;;
     --client)   echo "--client takes a value, e.g. --client=opencode"; exit 2 ;;
-    -h|--help)  sed -n '2,42p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,43p' "$0"; exit 0 ;;
     *) echo "unknown option: $arg"; exit 2 ;;
   esac
 done
@@ -72,7 +96,17 @@ if [ "$CLIENT" = "auto" ]; then
   fi
 fi
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PKG")"
+REPO_ROOT="$(resolve_root)"
+
+# Refuse rather than write into a path nothing can load from. Installing skills
+# where the loop cannot see them is the exact failure this package exists to
+# prevent, and it is quieter than any error.
+if [ $REPO_SCOPE -eq 1 ] && { [ ! -d "$REPO_ROOT" ] || [ ! -w "$REPO_ROOT" ]; }; then
+  echo "✗ --repo resolved to: $REPO_ROOT"
+  echo "  That is not a writable directory, so nothing would ever load from it."
+  echo "  Run without --repo to install under \$HOME, which always loads."
+  exit 2
+fi
 
 case "$CLIENT" in
   claude)
@@ -101,6 +135,15 @@ echo "morning loop · skill install"
 echo "  client: $CLIENT"
 echo "  from: $SRC"
 echo "  to:   $TARGET"
+if [ $REPO_SCOPE -eq 1 ]; then
+  if [ "$REPO_ROOT" = "$PKG" ]; then
+    echo "  note: no workspace above this clone, so --repo resolved to the clone itself."
+    echo "        That path loads only for a session rooted inside the clone; the"
+    echo "        default (\$HOME) loads everywhere."
+  else
+    echo "  root: $REPO_ROOT  (workspace holding this clone)"
+  fi
+fi
 [ $DRY -eq 1 ] && echo "  (dry run, nothing will be written)"
 echo
 
@@ -118,6 +161,14 @@ for dir in "$SRC"/*/; do
   fi
 
   dest="$TARGET/$name/SKILL.md"
+  # A workspace may link its load path straight at this clone. Such an install is
+  # current by construction, and copying would follow the link and rewrite the
+  # shared package in place. Report where the link really lands, resolved rather
+  # than asserted, and leave it alone.
+  if [ -L "$TARGET/$name" ] || [ -L "$dest" ]; then
+    echo "  = $name: symlinked, real target ${dest:A}"
+    skipped=$((skipped+1)); continue
+  fi
   if [ -f "$dest" ]; then
     if cmp -s "$src" "$dest"; then
       echo "  = $name: already current"; skipped=$((skipped+1)); continue
@@ -159,6 +210,12 @@ if [ -d "$CMD_SRC" ]; then
       dest="$CMD_TARGET/$name"
     fi
 
+    # Same symlink rule as the skills loop, and for the same reason: following the
+    # link would overwrite the package this script is reading from.
+    if [ -L "$dest" ] || { [ $CMD_AS_SKILL -eq 1 ] && [ -L "${dest:h}" ]; }; then
+      echo "  = $stem: symlinked, real target ${dest:A}"; continue
+    fi
+
     # On OpenCode a command is installed as a skill, and a skill whose frontmatter
     # has no `name:` never registers — the exact silent failure the rest of this
     # script exists to catch. morning.md, standup.md and brief.md ship without one,
@@ -195,7 +252,13 @@ echo
 echo "── verifying, because a copy that exits 0 is not proof ──"
 DOCTOR="$HERE/doctor.py"
 if [ -f "$DOCTOR" ]; then
-  python3 "$DOCTOR" --client "$CLIENT"
+  # State the root when we installed with --repo, so the check runs against the
+  # root we just wrote into rather than one the doctor resolves separately.
+  if [ $REPO_SCOPE -eq 1 ]; then
+    python3 "$DOCTOR" --client "$CLIENT" --repo-root "$REPO_ROOT"
+  else
+    python3 "$DOCTOR" --client "$CLIENT"
+  fi
   exit $?
 else
   echo "✗ doctor.py not found next to this script. Install is unverified."

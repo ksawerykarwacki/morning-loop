@@ -13,17 +13,20 @@ Xitong described the symptom exactly: "it's easy to half-adopt. I had a working
 config, drafts, and run-log, but /morning itself didn't work because the command
 files were never copied. Nothing in the flow catches this."
 
-This is that catch. It distinguishes three states that currently look identical:
+This is that catch. It distinguishes four states that currently look identical:
 
     ok            the skill resolves from a real load path
+    NOT INSTALLED it ships in this package, but was never installed
     NOT LOADABLE  the file exists, in a folder skills cannot load from
     MISSING       no file anywhere, so the rule can never run
 
 Run it after setup, and again whenever you edit your config:
 
-    python3 scripts/doctor.py                 # auto-resolve the config
-    python3 scripts/doctor.py --config path   # or point at one
-    python3 scripts/doctor.py --json          # machine-readable, for the loop
+    python3 scripts/doctor.py                    # auto-resolve config and root
+    python3 scripts/doctor.py --config path      # or point at one
+    python3 scripts/doctor.py --repo-root path   # or state the root outright
+    python3 scripts/doctor.py --client=opencode  # check another client's paths
+    python3 scripts/doctor.py --json             # machine-readable, for the loop
 
 Exit codes: 0 all good · 1 at least one rule cannot run · 2 no config found.
 """
@@ -71,6 +74,24 @@ DECOY_PATHS = ("{repo}/06-skills/skills/{name}.md",
                "{repo}/skills/{name}.md",
                "{repo}/.claude/skills/{name}.md")          # flat file, no directory
 
+# The package's own skills/ directory. A skill sitting here has shipped and simply
+# has not been installed yet, which needs the installer rather than someone writing
+# the skill from scratch. Same distinction the commands check already makes, and
+# reserving MISSING for names that exist nowhere is the point: "write the skill"
+# and "run the installer" are not the same instruction, and the wrong one costs an
+# afternoon of hunting for files that were in the package all along.
+SHIPPED_PATHS = ("{pkg}/skills/{name}/SKILL.md",
+                 "{repo}/skills/{name}/SKILL.md",
+                 "{repo}/05-automation/agent-manager/morning-loop-share/skills/{name}/SKILL.md")
+
+# A routing rule may name a command rather than a skill: the daily spine reuses
+# team-standup. Those ship in commands/ and the installer places them per client,
+# so the shipped-not-installed state has to cover them too or the one name that
+# only ever ships as a command reads as MISSING.
+SHIPPED_COMMAND_PATHS = ("{pkg}/commands/{name}.md",
+                         "{repo}/commands/{name}.md",
+                         "{repo}/05-automation/agent-manager/morning-loop-share/commands/{name}.md")
+
 CONFIG_CANDIDATES = (
     "{env}",
     # workspace layout
@@ -82,12 +103,50 @@ CONFIG_CANDIDATES = (
 )
 
 
-def repo_root(start: pathlib.Path) -> pathlib.Path:
-    """Walk up to the git root so the script works from anywhere in the repo."""
-    for p in [start, *start.parents]:
-        if (p / ".git").exists():
-            return p
-    return start
+def looks_like_package(p: pathlib.Path) -> bool:
+    """Is this the package clone itself? It ships commands/, skills/ and this script."""
+    return ((p / "commands").is_dir() and (p / "skills").is_dir()
+            and (p / "scripts" / "doctor.py").is_file())
+
+
+def looks_like_workspace(p: pathlib.Path) -> bool:
+    """Is this a workspace that CLONES the package, rather than the clone itself?
+
+    Home and the filesystem root are deliberately excluded. ~/.claude is the
+    user-level load path, not a workspace root, and treating it as one would send
+    config resolution to the home directory instead of to the clone.
+    """
+    if p == pathlib.Path.home() or p == p.parent:
+        return False
+    return ((p / "06-skills").is_dir() or (p / "05-automation").is_dir()
+            or (p / ".claude").is_dir())
+
+
+def repo_root(start: pathlib.Path) -> tuple[pathlib.Path, str]:
+    """Resolve the root that load paths and config candidates hang off.
+
+    The git root is the right answer for a standalone clone. It is the WRONG
+    answer when the package is cloned INSIDE a workspace, which is the layout
+    ADOPT-MORNING.md blesses: then the git root is the package, and
+    <package>/.claude/skills is a folder nothing loads from. A fully installed
+    setup came back as "4 thing(s) cannot run", and the fix text told the adopter
+    to write skills that already ship and to comment out working coverage.
+
+    So probe the layout instead of counting parents. Counting parents against a
+    layout it did not expect is what produced this class of bug twice already.
+
+    Returns the root and how it was chosen, because a silently wrong root reports
+    every name under it as MISSING and that is exactly what this tool exists to
+    catch. The caller prints the reason next to the config line.
+    """
+    git_root = next((p for p in [start, *start.parents] if (p / ".git").exists()), None)
+    root = git_root or (start.parent if looks_like_package(start.parent) else start)
+    if not looks_like_package(root):
+        return root, "git root" if git_root else "no git root, using the script's directory"
+    ws = next((p for p in root.parents if looks_like_workspace(p)), None)
+    if ws:
+        return ws, "workspace holding the package clone"
+    return root, "standalone package clone"
 
 
 def find_config(repo: pathlib.Path, explicit: str | None) -> pathlib.Path | None:
@@ -172,7 +231,7 @@ def detect_client(explicit: str | None) -> str:
 
 
 def resolve_skill(name: str, repo: pathlib.Path, home: pathlib.Path,
-                  client: str = "claude") -> dict:
+                  pkg: pathlib.Path, client: str = "claude") -> dict:
     spec = CLIENTS[client]
     for tpl in spec["skills"]:
         p = pathlib.Path(tpl.format(repo=repo, home=home, name=name))
@@ -196,6 +255,16 @@ def resolve_skill(name: str, repo: pathlib.Path, home: pathlib.Path,
                 return {"state": "NOT LOADABLE", "at": str(p),
                         "fix": f"installed for {other}, but you are running {client}. "
                                f"Re-run ./scripts/install-skills.sh --client={client}"}
+    # Shipped in the package, never installed. Client-independent on purpose: the
+    # package's skills/ directory is the same file for every client, and the fix
+    # is the installer pointed at the client you actually run.
+    for tpl in (*SHIPPED_PATHS, *SHIPPED_COMMAND_PATHS):
+        p = pathlib.Path(tpl.format(repo=repo, home=home, pkg=pkg, name=name))
+        if p.is_file():
+            return {"state": "NOT INSTALLED", "at": str(p),
+                    "fix": f"ships in this package, not installed yet. Run "
+                           f"./scripts/install-skills.sh --client={client} "
+                           f"(it installs commands too)"}
     for tpl in DECOY_PATHS:
         p = pathlib.Path(tpl.format(repo=repo, home=home, name=name))
         if p.is_file():
@@ -203,8 +272,9 @@ def resolve_skill(name: str, repo: pathlib.Path, home: pathlib.Path,
             return {"state": "NOT LOADABLE", "at": str(p),
                     "fix": f"mkdir -p {target.parent} && cp '{p}' {target}"}
     return {"state": "MISSING", "at": None,
-            "fix": f"no file named {name} anywhere. Either write the skill, or "
-                   f"comment the rule out so it stops looking like coverage."}
+            "fix": f"no file named {name} anywhere, not even in this package. Either "
+                   f"write the skill, or comment the rule out so it stops looking "
+                   f"like coverage."}
 
 
 def check_frontmatter(path: str, client: str = "claude") -> str | None:
@@ -224,13 +294,19 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Validate a morning-loop setup.")
     ap.add_argument("--config")
     ap.add_argument("--json", action="store_true")
-    ap.add_argument("--repo")
+    # --repo is the older spelling, kept so existing invocations do not break.
+    ap.add_argument("--repo-root", "--repo", dest="repo_root",
+                    help="state the root that load paths hang off (default: probe)")
     ap.add_argument("--client", choices=sorted(CLIENTS),
                     help="which client's load paths to check (default: detect)")
     args = ap.parse_args()
 
     here = pathlib.Path(__file__).resolve().parent
-    repo = pathlib.Path(args.repo).expanduser() if args.repo else repo_root(here)
+    pkg = here.parent
+    if args.repo_root:
+        repo, root_why = pathlib.Path(args.repo_root).expanduser(), "given with --repo-root"
+    else:
+        repo, root_why = repo_root(here)
     home = pathlib.Path.home()
     client = detect_client(args.client)
 
@@ -253,7 +329,7 @@ def main() -> int:
                             "note": "no skill: handled inside the command"})
             continue
         for name in (skills if isinstance(skills, list) else [skills]):
-            r = resolve_skill(name, repo, home, client)
+            r = resolve_skill(name, repo, home, pkg, client)
             if r["state"] == "ok":
                 fm = check_frontmatter(r["at"], client)
                 if fm:
@@ -276,7 +352,10 @@ def main() -> int:
         # Same three-state distinction as skills: shipped-but-not-installed needs a
         # different fix from missing-entirely, and conflating them is what sent people
         # hunting for files that were sitting in the package all along.
-        shipped = [str(p) for p in (repo / "commands" / f"{cmd}.md",
+        # pkg is listed because the root may be the workspace ABOVE the clone, and
+        # then repo/commands does not exist while the package still ships the file.
+        shipped = [str(p) for p in (pkg / "commands" / f"{cmd}.md",
+                                    repo / "commands" / f"{cmd}.md",
                                     repo / "05-automation/agent-manager/morning-loop-share/commands" / f"{cmd}.md")
                    if p.is_file()]
         if shipped:
@@ -305,14 +384,67 @@ def main() -> int:
             paths_state.append({"what": key, "state": "ok" if p.exists() else "missing (will be created)",
                                 "at": str(p)})
 
+    # Rubrics. morning.md's verify stage resolves {paths.rubrics_dir}/{skill}.rubric.yml
+    # and falls back to _base alone when a skill has no rubric of its own. So a
+    # missing skill rubric is a real gap and a warning, while a missing rubrics_dir
+    # key is a failure: without it nothing resolves at all, not even the fallback.
+    # This is the one place the config-to-package mismatch class lives, and until
+    # now doctor never looked at it.
+    rubrics_state: list[dict] = []
+    rubrics_dir_raw = (cfg.get("paths") or {}).get("rubrics_dir")
+    shipped_rubrics = pkg / "rubrics"
+    try:
+        hint = f"{shipped_rubrics.relative_to(repo)}/"
+    except ValueError:
+        hint = f"{shipped_rubrics}/"
+    if not rubrics_dir_raw:
+        rubrics_state.append({"what": "paths.rubrics_dir", "state": "MISSING", "at": None,
+                              "fix": "your config defines no paths.rubrics_dir, so the verify "
+                                     "stage cannot resolve any rubric, including the _base "
+                                     f'fallback. Add  rubrics_dir: "{hint}"  under paths: '
+                                     "(this package ships the rubrics there)."})
+        blocked += 1
+    else:
+        rdir = pathlib.Path(rubrics_dir_raw).expanduser()
+        if not rdir.is_absolute():
+            rdir = repo / rubrics_dir_raw
+        base = rdir / "_base.rubric.yml"
+        if base.is_file():
+            rubrics_state.append({"what": "_base.rubric.yml", "state": "ok", "at": str(base)})
+        else:
+            fix = (f"rubrics_dir points at {rdir}, which holds no _base.rubric.yml. "
+                   "Every rubric extends it and the fallback IS it, so no draft can "
+                   "be graded.")
+            if (shipped_rubrics / "_base.rubric.yml").is_file():
+                fix += (f' This package ships them at {shipped_rubrics}, so from this '
+                        f'root the value wants to be  rubrics_dir: "{hint}"  instead.')
+            rubrics_state.append({"what": "_base.rubric.yml", "state": "MISSING",
+                                  "at": str(base), "fix": fix})
+            blocked += 1
+        seen: list[str] = []
+        for r in results:
+            name = r.get("skill")
+            if not name or name in seen:
+                continue
+            seen.append(name)
+            rf = rdir / f"{name}.rubric.yml"
+            rubrics_state.append({"what": name, "at": str(rf) if rf.is_file() else None,
+                                  "state": "ok" if rf.is_file()
+                                  else "_base fallback (no skill rubric)"})
+
     if args.json:
         print(json.dumps({"config": str(cfg_path), "client": client,
+                          "root": str(repo), "root_from": root_why,
                           "parsed_by": cfg.get("_parsed_by", "yaml"),
                           "rules": results, "commands": cmd_states, "paths": paths_state,
-                          "blocked": blocked}, indent=2))
+                          "rubrics": rubrics_state, "blocked": blocked}, indent=2))
         return 1 if blocked else 0
 
-    print(f"\nMORNING LOOP DOCTOR\nclient: {client}\nconfig: {cfg_path}")
+    # The root is printed next to the config because a silently wrong root is the
+    # class of bug this tool exists to catch, and it reports every name under it
+    # as MISSING while looking perfectly healthy about it.
+    print(f"\nMORNING LOOP DOCTOR\nclient: {client}\nconfig: {cfg_path}"
+          f"\nroot:   {repo}  ({root_why})")
     if cfg.get("_parsed_by"):
         print("note:   PyYAML not installed, using the narrow fallback parser. "
               "Install PyYAML for a stricter read.")
@@ -333,6 +465,13 @@ def main() -> int:
         if c.get("fix"):
             print(f"      fix: {c['fix']}")
 
+    print("\nRUBRICS")
+    for r in rubrics_state:
+        mark = "✓" if r["state"] == "ok" else ("!" if r["state"].startswith("_base") else "✗")
+        print(f"  {mark} {r['what']:<24} {r['state']}")
+        if r.get("fix"):
+            print(f"      fix: {r['fix']}")
+
     print("\nPATHS")
     for p in paths_state:
         print(f"  {'✓' if p['state'] == 'ok' else '·'} {p['what']:<20} {p['state']}")
@@ -343,11 +482,30 @@ def main() -> int:
     print("  does not break it. A missing SKILL silently does nothing, which is worse.")
 
     if blocked:
-        print(f"\n✗ {blocked} thing(s) cannot run. Every one is silent at runtime: the rule")
-        print("  fires, finds nothing, and reports no error. Fix them or comment the rules")
-        print("  out, so your config stops describing coverage you do not have.\n")
+        # Only say what actually applies. The old text told you to comment the rule
+        # out no matter what was blocked, which is wrong advice for a missing config
+        # key: there is no rule to comment out, and following it removes coverage
+        # that was never the problem.
+        every = [*results, *cmd_states]
+        broken_rules = [r for r in every if not str(r["state"]).startswith(("ok", "inline"))]
+        advice: list[str] = []
+        if broken_rules:
+            advice.append("  A broken rule fires, finds nothing, and reports no error. Fix it or\n"
+                          "  comment it out, so your config stops describing coverage you do not have.")
+        if any(r["state"] == "NOT INSTALLED" for r in broken_rules):
+            advice.append("  NOT INSTALLED means the file ships in this package and the installer is\n"
+                          "  the whole fix. Do not write it again from scratch.")
+        if not notifier:
+            advice.append("  notify.py is not in either layout, so a finished brief has nothing to\n"
+                          "  deliver it. Pull the latest package.")
+        if any(r["state"] == "MISSING" for r in rubrics_state):
+            advice.append("  A rubrics failure is a config path, not a rule: commenting anything out\n"
+                          "  will not help. Point paths.rubrics_dir at the shipped rubrics, or the\n"
+                          "  verify stage cannot grade a single draft.")
+        print(f"\n✗ {blocked} thing(s) cannot run, and each is silent at runtime.")
+        print("\n".join(advice) + "\n")
     else:
-        print("\n✓ Every rule resolves and both commands are present.")
+        print("\n✓ Every rule resolves, both commands are present, rubrics are reachable.")
         print("  This does not mean the loop works, only that nothing is missing.")
         print("  The real test is one clean unattended scheduled run.\n")
     return 1 if blocked else 0
