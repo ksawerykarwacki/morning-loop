@@ -475,14 +475,57 @@ def notify_mattermost(summary: dict, md: str, bid: int | None,
         die(3, f"could not reach the Mattermost webhook: {e}")
 
 
+# `delivery.channel` was a config key nothing read. commands/morning.md says the
+# brief goes to `delivery.channel`, but the invocation it ships passes only
+# --brief and --date, and this script defaulted to macos. So an adopter who set
+# `channel: file` got macos, and the receipt recorded macos while the config said
+# file. That is a config describing coverage you do not have, in the delivery
+# phase. Resolve it here too, so omitting --channel cannot silently change the
+# channel, and say where the value came from.
+CONFIG_CANDIDATES = (
+    "{root}/06-skills/skills/agent-manager-config.{user}.yml",
+    "{root}/06-skills/skills/agent-manager-config.yml",
+    "{root}/agent-manager-config.{user}.yml",
+    "{root}/agent-manager-config.yml",
+)
+
+
+def config_channel(root: pathlib.Path) -> tuple[str | None, str | None]:
+    """(channel, where it came from) from delivery.channel, or (None, None)."""
+    env = os.environ.get("MORNING_CONFIG")
+    cands = [pathlib.Path(env).expanduser()] if env else []
+    user = (os.environ.get("USER") or "").lower()
+    cands += [pathlib.Path(t.format(root=root, user=user)) for t in CONFIG_CANDIDATES]
+    for c in cands:
+        try:
+            if not c.is_file():
+                continue
+            text = c.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        in_delivery = False
+        for line in text.splitlines():
+            if re.match(r"^delivery:", line):
+                in_delivery = True
+                continue
+            if in_delivery:
+                if re.match(r"^\S", line):
+                    break
+                m = re.match(r"\s+channel:\s*([a-z]+)", line)
+                if m and m.group(1) in ("macos", "mattermost", "file"):
+                    return m.group(1), str(c)
+    return None, None
+
+
 # --------------------------------------------------------------- main
 def main() -> int:
     global RECEIPT
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--brief", required=True)
-    ap.add_argument("--channel", default=os.environ.get("MORNING_NOTIFY_CHANNEL", "macos"),
-                    choices=["macos", "mattermost", "file"])
+    ap.add_argument("--channel", default=None, choices=["macos", "mattermost", "file"],
+                    help="overrides delivery.channel in the config. Omitted, the "
+                         "config's value is used, then macos.")
     ap.add_argument("--date")
     ap.add_argument("--webhook", default=os.environ.get("MORNING_MATTERMOST_WEBHOOK"))
     ap.add_argument("--no-open", action="store_true", help="don't open the rendered brief")
@@ -493,6 +536,18 @@ def main() -> int:
     a = ap.parse_args()
 
     configure_roots(a.root)
+
+    # Channel precedence: --channel, then $MORNING_NOTIFY_CHANNEL, then the
+    # config's delivery.channel, then macos. Recorded so a surprise is traceable.
+    chan_src = "--channel"
+    if a.channel is None:
+        a.channel = os.environ.get("MORNING_NOTIFY_CHANNEL")
+        chan_src = "$MORNING_NOTIFY_CHANNEL"
+    if a.channel is None:
+        a.channel, where = config_channel(REPO)
+        chan_src = f"config {where}" if a.channel else chan_src
+    if a.channel is None:
+        a.channel, chan_src = "macos", "default (no config value found)"
 
     # Build the receipt FIRST, on the least information that makes it useful: a
     # date and where it will be written. Everything after this point can fail,

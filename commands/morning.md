@@ -266,9 +266,14 @@ A plan file on a machine you are not sitting at helps nobody. After the plan fil
 **Deliver with `delivery.notifier_script`.** One command, whatever the channel:
 
 ```
-python3 05-automation/agent-manager/scripts/notify.py \
-  --brief {paths.plan_file} --date {DATE}
+python3 {delivery.notifier_script} \
+  --brief {paths.plan_file} --date {DATE} --channel {delivery.channel}
 ```
+
+Pass `--channel` explicitly. The script also reads `delivery.channel` itself when
+the flag is omitted, but a phase that says it delivers to `delivery.channel` should
+name it in the command: until 2026-09-03 neither did, the script defaulted to
+`macos`, and a config that said `file` produced a receipt that said `macos`.
 
 **Zero setup is a hard requirement of this phase, not a preference.** A delivery step that needs an account is a step most people never complete, and an undelivered brief is worth exactly as much as no loop. `macos` is the default: a native notification plus the brief rendered as a local web page, nothing to sign up for, works offline. `mattermost` costs one webhook URL and reaches a phone.
 
