@@ -23,3 +23,8 @@ com.morning-loop.prep.plist
 
 # opencode workspace artefacts
 .omo/
+
+# Windows pendants of the above: only the *.template.ps1 files are shared.
+scripts/run-prep.ps1
+scripts/register-prep-task.ps1
+taskscheduler*.log

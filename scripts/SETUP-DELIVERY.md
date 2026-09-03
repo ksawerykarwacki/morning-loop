@@ -149,3 +149,37 @@ Each brief gets a number, shown in the notification title and the page: `☀️ 
 In your terminal, `/brief 21` (or just saying `morning loop #21`) reloads that brief's plan file, that day's agent drafts, its run-log entry and its delivery receipt, so you can pick up where the loop left off instead of re-deriving it. `/brief last 3` leads with what changed across them.
 
 One rule is built into that command: a brief is a snapshot of a **past** morning, so anything time-sensitive gets re-verified against live Jira before it is treated as current.
+
+---
+
+## Scheduling the run (Windows)
+
+The Windows pendant of the launchd section above. Two templates, both under `scripts/`:
+
+```powershell
+# 1. configure your runner
+Copy-Item scripts\run-prep.template.ps1 scripts\run-prep.ps1
+notepad scripts\run-prep.ps1              # fill the FILL lines: $WorkDir, $Claude, plan/automation paths
+
+# 2. do ONE supervised run before handing it to Task Scheduler
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-prep.ps1; "exit $LASTEXITCODE"
+Get-Content 05-automation\agent-manager\taskscheduler.log -Tail 20
+
+# 3. only then, register the task (per-user, no admin)
+Copy-Item scripts\register-prep-task.template.ps1 scripts\register-prep-task.ps1
+notepad scripts\register-prep-task.ps1    # fill $RunPrep with the absolute path of your run-prep.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\register-prep-task.ps1
+Get-ScheduledTask -TaskName MorningLoop-Prep   # expect EXACTLY one entry
+```
+
+`notify.env` works unchanged: the runner parses `export KEY=value` lines from `%USERPROFILE%\.config\morning-loop\notify.env`, so a Mattermost webhook set up per Option 2 is picked up on Windows too. `MORNING_NOTIFY_CHANNEL=macos` falls back to `file`; the runner adds a one-line Windows toast on top of whichever channel delivered.
+
+Exit codes (Task Scheduler "Last Run Result"): `0` delivered, `2` a second run for today was skipped, `3` no plan file written, `4` plan written but not delivered, `10` VPN never came up, `124` claude killed after 25 minutes.
+
+Three things that bite on Windows:
+
+- **Force UTF-8 on the console before logging claude's output**, or the log fills with mojibake. The template does this; keep it.
+- **Prefer `Register-ScheduledTask` over `schtasks.exe`.** Quoting a `-File` path with spaces through `schtasks` is where most first attempts die.
+- **`Start-Process -PassThru` can hand back a null ExitCode**, and exiting with null is `0x0`, which reports a total failure as success. The template derives the exit code from the plan file and receipt instead. Do not simplify that back to the process exit code.
+
+Remove it with `Unregister-ScheduledTask -TaskName MorningLoop-Prep -Confirm:$false`.

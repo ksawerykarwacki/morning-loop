@@ -76,6 +76,7 @@ scripts/
   run-prep.template.sh            ← schedule the read-only pre-run (launchd) + delivery safety net
   run-prep.opencode.template.sh   ← the same runner for OpenCode
   com.morning-loop.prep.plist.template  ← the launchd job the runner is scheduled by
+  run-prep.template.ps1, register-prep-task.template.ps1  ← the same for Windows (Task Scheduler)
   notify.py                       ← delivers the brief (macOS notification / Mattermost / file)
   SETUP-DELIVERY.md               ← pick a channel. The default costs ZERO setup: read this
 ```
@@ -92,6 +93,8 @@ way a missing one is not. Run the installer, then the doctor:
 ./scripts/install-skills.sh               # do it, then verify itself
 python3 scripts/doctor.py                 # do not proceed until this exits 0
 ```
+
+On Windows the runner is Task Scheduler rather than launchd: see `scripts/SETUP-DELIVERY.md` for `run-prep.template.ps1` and `register-prep-task.template.ps1`.
 
 It resolves your client's real load paths and puts each piece where that client reads it:
 

@@ -96,6 +96,7 @@ Each mod follows the same shape so it stays scannable and machine-parseable.
 - **Type:** scheduling · **Applies to:** Windows · **Status:** 🟢 personal.
 - **How to adopt:** ask Maria for `run-prep.ps1`. Two gotchas: force UTF-8 output encoding when logging (else mojibake), and prefer `Register-ScheduledTask` over `schtasks` for quoting.
 - **Source:** KM-13612 (Maria 2026-07-07).
+- **Now in package (2026-09-03, MR windows-runner-port):** `scripts/run-prep.template.ps1` + `scripts/register-prep-task.template.ps1`, documented in RUN-AND-NOTIFY.md and SETUP-DELIVERY.md. Status flip to "in package" left to Tomek on merge.
 
 ### 7. Cursor adapter
 - **Author:** Daniel Blam · **Client/OS:** Cursor, Windows
