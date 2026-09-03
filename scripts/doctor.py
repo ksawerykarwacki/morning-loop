@@ -318,7 +318,8 @@ def main() -> int:
               "  Copy the template first: skills/agent-manager-config.template.yml")
         return 2
 
-    cfg = parse_config(cfg_path.read_text(encoding="utf-8", errors="replace"))
+    cfg_text = cfg_path.read_text(encoding="utf-8", errors="replace")
+    cfg = parse_config(cfg_text)
     rules = cfg.get("routing") or []
 
     results, blocked = [], 0
@@ -390,6 +391,25 @@ def main() -> int:
     # key is a failure: without it nothing resolves at all, not even the fallback.
     # This is the one place the config-to-package mismatch class lives, and until
     # now doctor never looked at it.
+    # DISPATCH. Phase 2p is v3's headline fix and morning.md gates it on
+    # dispatch.predraft_in_prep. No shipped template defines the block, so an
+    # adopter starting from one gets no unattended pre-drafting and nothing says
+    # so: Andres Cagua ran 8 days before noticing (KM-14354, 2026-09-02). The
+    # parser only models routing and paths, so read the raw text.
+    dispatch_state: list[dict] = []
+    has_dispatch = re.search(r"^dispatch:", cfg_text, re.M) is not None
+    m_pre = re.search(r"^\s+predraft_in_prep:\s*(true|false)", cfg_text, re.M)
+    if not has_dispatch or m_pre is None:
+        dispatch_state.append({
+            "what": "dispatch.predraft_in_prep", "state": "NOT SET",
+            "fix": "add a `dispatch:` block with `predraft_in_prep: false` (or true). "
+                   "Absent, Phase 2p never runs and the brief stays a to-do list "
+                   "instead of a set of finished drafts."})
+    else:
+        on = m_pre.group(1) == "true"
+        dispatch_state.append({
+            "what": "dispatch.predraft_in_prep", "state": "on" if on else "off (explicit)"})
+
     rubrics_state: list[dict] = []
     rubrics_dir_raw = (cfg.get("paths") or {}).get("rubrics_dir")
     shipped_rubrics = pkg / "rubrics"
@@ -437,7 +457,7 @@ def main() -> int:
                           "root": str(repo), "root_from": root_why,
                           "parsed_by": cfg.get("_parsed_by", "yaml"),
                           "rules": results, "commands": cmd_states, "paths": paths_state,
-                          "rubrics": rubrics_state, "blocked": blocked}, indent=2))
+                          "rubrics": rubrics_state, "dispatch": dispatch_state, "blocked": blocked}, indent=2))
         return 1 if blocked else 0
 
     # The root is printed next to the config because a silently wrong root is the
@@ -464,6 +484,13 @@ def main() -> int:
               + (f"  {c['at']}" if c.get("at") else ""))
         if c.get("fix"):
             print(f"      fix: {c['fix']}")
+
+    print("\nDISPATCH")
+    for d in dispatch_state:
+        mark = "!" if d["state"] == "NOT SET" else "\u00b7"
+        print(f"  {mark} {d['what']:<24} {d['state']}")
+        if d.get("fix"):
+            print(f"      fix: {d['fix']}")
 
     print("\nRUBRICS")
     for r in rubrics_state:

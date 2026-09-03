@@ -57,8 +57,8 @@ checks:
     type: structural
     severity: normal
     scope: data
-    statement: "No article already recorded in the shared seen log is presented as new, and any article newly digested is appended to it with its date, title and URL."
-    rationale: "SKILL.md: the seen log is committed and shared so the whole team benefits from deduplication. A brief that reads but does not update it silently breaks that for everyone else."
+    statement: "No article already recorded in the shared seen log is presented as new, and any article newly digested is appended to it with its date, title and URL. If the log could not be written, the brief says so; an unwritable log is n/a, not a fail."
+    rationale: "SKILL.md: the seen log is committed and shared so the whole team benefits from deduplication. A brief that reads but does not update it silently breaks that for everyone else. The n/a clause is from Andres Cagua's 2026-09-02 report that his seen log was blocked from writing at its git-tracked path for 6+ runs: failing a draft for an environment fault teaches the grader to be ignored."
 
   - id: every_to_ideas_concrete
     type: binary_llm
