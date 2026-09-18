@@ -118,6 +118,31 @@ Collect the probe results, drop the nulls, and merge. This step is a few lines o
 
 One probe failing never aborts the run. It narrows it, honestly, and the preflight line says which.
 
+### 1d · Routing-table skills — dispatched here too, not just planned in Phase 2 (added 2026-08-25, local fix, personal loop only)
+
+**The fixed 9 probes above are not the only things this phase senses.** Every firing `routing` rule with `bucket: auto` and a non-null `skill:` (e.g. a personal daily-habit tool wired in via config) gets dispatched **right here, in this same fan-out**, as its own bounded-context sub-agent — not deferred to "mention it somehow" in Phase 2. Phase 2 plans what to do with sensed material; it does not itself go sense anything. A routing rule that never gets an explicit dispatch instruction is a routing rule the loop will treat as a hint rather than a command, and that is exactly how a named skill silently never runs.
+
+Two things this dispatch must do, confirmed live as the two ways it silently failed when this instruction was missing entirely:
+
+1. **Invoke the named `skill:` by its exact name — never substitute a different tool**, even one that seems topically related or is already connected. Resolve and run the literally-named skill or command (via the Skill/Command tool), the same discipline as the fixed probes. Confirmed live: `skill: ac-inbox` never actually ran because the model reached for an already-connected Mattermost MCP connector instead — the wrong tool, just a thematically close one. `doctor.py` only proves a named skill *resolves*; it does not prove a dispatch actually *invoked* it. If the named skill or command cannot be found or invoked for real, that is a degradation named in the preflight line, never a silent swap.
+2. **Capture that skill's full output verbatim, unsummarised, the same as a probe's evidence.** Whether it gets compressed for the brief is a Phase 2 rendering decision (`render: bullet` vs `render: section`, see below) — it is not something to pre-summarise here. Confirmed live: without this, a 7-day timesheet grid and a categorized email digest both arrived at Phase 2 already thinned down to a sentence, so even a correct rendering decision downstream had nothing full left to render.
+
+Route these through the same tiering as probes: routing-rule skills doing bounded extraction can use `sense.probe_model_cheap`; anything closer to judgment stays on the session model.
+
+### 1e · Confluence direct mentions (personal addition, ported from v2's KM-14119 work, 2026-09-01)
+
+**Not one of v3.1's 9 fixed probes, and not covered by anything else in this package** — Confluence mentions are explicitly named in `ATTENTION-TRIAGE.md` as a known gap, still unbuilt there. This is a real, validated feature from the old package, ported here as inline logic (like `routine_health`/`ceremony_capture` above), not delegated to an external skill.
+
+Run `mention = "{owner's account ID}" order by lastmodified desc` via Confluence CQL — ground truth, independent of email-notification/read state, so it never misses a mention just because the notification email was already read or archived. Resolve the owner's account ID the same way `ac-timesheet` does: check `$JIRA_ACCOUNT_ID` first, else `atlassianUserInfo`.
+
+**Filter out noise before surfacing anything:** skip any result whose title matches a known meeting-note pattern (`Daily`, `async Standup`, `Standup`, `Refinement`, `Planning`, `Design & Refine`, `Design Session`, `Retro`, `Retrospective`, `Review`, `Demo`, `AMA`) — those pages tag every attendee by design and are already covered by the `meetings` probe; including them here would just be the same content twice.
+
+**Checkbox-aware, not a one-time-seed blanket rule.** Fetch each surviving result's full body (`getConfluencePage`) and check for Confluence task-list syntax (`- [ ]` / `- [x]`) near the mention:
+- **Has a checkbox assigned to the owner:** a genuine open/closed action item with state that already lives in Confluence itself — don't invent a parallel "dismissed" flag. Re-check the page live every run and keep surfacing it for as long as the box is unchecked; stop the moment Confluence shows it checked, which the owner can do directly in Confluence, not only through this loop.
+- **Plain mention, no checkbox found:** nothing to track — seed it once into `paths.processed_mentions` and never resurface it, same model as `meeting_source`'s dedup.
+
+Wired in as the `confluence_mentions` routing rule (`bucket: auto`, `render: section` — a checkbox action item is exactly the kind of single, load-bearing fact that a bullet would still preserve fine on its own, but rendering it as its own section keeps it visually as prominent as the other personal-tool sections rather than getting lost in "Already done"). State file: `paths.processed_mentions`.
+
 ---
 
 ## Phase 2 — PLAN (the manager brain)
@@ -192,6 +217,12 @@ Walk every rule in `routing` and decide if it fires today:
 
 For each firing rule, build a **plan item**: `{job, skill, bucket, external_action, why-it-fired, est. time saved}`. Sort into the four buckets and write the **plan file** (`paths.plan_file`) using the layout below.
 
+**Rendering a `bucket: auto` rule's already-sensed output — invocation happened back in 1d, this is only about how it appears in the brief (added 2026-08-25, local fix, personal loop only — proposed upstream on KM-14354, not yet part of the shared package).** An optional `render:` field on the rule controls this. Default is `render: bullet` — a one-line summary folded into "Already done," fine for anything that's genuinely a single fact (a count, an "N new"). Set `render: section` on a rule whose 1d output is multi-item or structured (a table, a categorized list, several distinct entries): folding that into one bullet silently discards the individual items that made the job worth running.
+
+**This config currently has exactly five `render: section` rules — `timesheet_grid`, `email_digest`, `mattermost_inbox`, `blocked_ticket_watch`, `confluence_mentions` — and the template below names their sections explicitly rather than describing a generic loop, on purpose (2026-08-26, extended 2026-09-03 per KM-14354 when `blocked_ticket_watch` was found still folded into a bullet despite carrying `render: section` in config).** A generic "one heading per render:section rule, figure out the rest" instruction was tried first and did not hold on a real unattended run — the plan file still folded all three into "Already done" bullets despite the rule and the instruction both being correctly in place, confirmed by comparing a forced/prompted re-test (worked) against the next real scheduled run (didn't). Named, concrete placeholders are what actually held reliably for the equivalent problem in the old v2 package — so this local fix trades genericity for reliability on purpose. If a sixth `render: section` rule gets added later, add its own named heading here the same way rather than trusting a loop-shaped instruction to cover it.
+
+**These five headings are mandatory whenever their rule fires — never optional, never replaced by a bullet, regardless of how routine or quiet that day's output is.** Before writing "Already done," check off `timesheet_grid` / `email_digest` / `mattermost_inbox` / `blocked_ticket_watch` / `confluence_mentions` against this list — if any fired in 1d, its full output goes ONLY in its own named heading below, never also (or instead) as a line in "Already done." A quiet day ("nothing needs a reply", "nothing blocked") still gets its full heading, just with less under it — quietness is not a reason to compress it back into a bullet. `blocked_ticket_watch` and `confluence_mentions` in particular will often have nothing to report most days — that quiet result still gets its own heading, not silence.
+
 ```markdown
 # Morning Plan — {DATE} ({weekday}, sprint {n}/{len}, {phase})
 
@@ -214,6 +245,23 @@ For each firing rule, build a **plan item**: `{job, skill, bucket, external_acti
 - Every.to: {n new / nothing new}
 - Jira sprint: {counts; stale flags}
 - Open commitments: {n carried}
+{one bullet per fired `bucket: auto` rule with render: bullet (the default) ONLY — never timesheet_grid/email_digest/mattermost_inbox/blocked_ticket_watch/confluence_mentions, those never appear here, not even as a summary line}
+{if any of the five named render:section rules did NOT fire today (signal didn't match), say so explicitly here in one line each — e.g. "ac-inbox: not run this signal" — never just silently absent}
+
+## 📊 `ac-timesheet` — timesheet_grid (skip this whole heading only if the rule didn't fire today)
+{the rule's full 1d output, verbatim — the grid, Rippling status, zero-hour/done-ticket offers, all of it}
+
+## 📧 `ac-email-digest` — email_digest (skip this whole heading only if the rule didn't fire today)
+{the rule's full 1d output, verbatim — every category, every item, not a count}
+
+## 📬 `ac-inbox` — mattermost_inbox (skip this whole heading only if the rule didn't fire today)
+{the rule's full 1d output, verbatim — needs-reply list and FYI list both, not a channel count}
+
+## 🔓 `ac-blocked-watch` — blocked_ticket_watch (skip this whole heading only if the rule didn't fire today)
+{the rule's full 1d output, verbatim — new comments on BLOCKED tickets, or "nothing new on blocked tickets" if quiet}
+
+## 📌 Confluence Mentions — confluence_mentions (skip this whole heading only if the rule didn't fire today)
+{every open checkbox action item (re-checked live) plus a note of any newly-seeded plain mentions this run — or "nothing open" if there are open checkboxes to report but none currently unchecked}
 
 ## Run economics
 - Jobs the agent can draft today: {n}  ·  est. time saved if you ship them: ~{x}h
@@ -328,10 +376,7 @@ Other channels behave the same way: `confluence_page` updates one rolling page i
 
 ## Phase 2c — NOTIFY + HEALTH (verify your own end deliverable)
 
-**Notify.** One line on `notify.channel`, no more. Its job is to get you to open the brief, not to be the brief:
-```
-☀️ Morning brief ready — {n} drafts, {m} decisions, {k} meetings. Top: {the one item}.
-```
+**Notify — already done, do not send a second one here (clarified 2026-08-27, local fix, personal loop only).** The one-line notification this section describes is the *same* notification `delivery.notifier_script` already sent as part of Phase 2b — `notify.py`'s own delivery mechanism produces exactly this "counts + top item" line via the OS notification. **Do not call `osascript` or any other notification mechanism directly in this phase, and do not re-invoke the notifier script here either.** Confirmed live (2026-08-27): treating this as a separate step produced two real notifications for one brief, plus a delivery claim inside the session that didn't match what was actually on disk when checked immediately after — the same "confidently wrong" pattern as a fabricated file-write claim. If Phase 2b's delivery succeeded, this line's job is already satisfied; if it didn't, that's a Health finding below, not a second delivery attempt.
 
 **Health (`health.enabled`).** Before the run ends, verify the **end deliverable exists**, not that the script exited 0:
 1. The plan file was written for `{DATE}`.
@@ -375,7 +420,9 @@ The brief then carries the drafts, so the 🤖 section reads:
 
 **This changes the honest accounting, in the direction that matters.** A job that was scheduled, drafted unattended, cleared every check, and shipped without a heavy rewrite is the definition the run log has been using for "truly autonomous" all along, and until now the loop has structurally been unable to produce one, because drafting could not happen unattended. Keep the bar exactly where it is. A pre-drafted item that Tomek rewrites before shipping is still tooling coverage, and the run log still says so.
 
-**This phase runs after delivery, on purpose.** Drafting six items with independent verification takes far longer than sensing and planning, and the brief must not wait behind it: you would be reading yesterday's arrival time for the same information. So the brief goes out on schedule with the 🤖 section marked `drafting…`, and when the drafts land this phase **updates the same brief in place and re-runs the notifier with the same `{DATE}`**, which reuses the same `#id` rather than burning a new one. Second notification, one line: `🤖 {n} drafts ready ({ready} READY). /morning to ship.`.
+**This phase runs after delivery, on purpose.** Drafting six items with independent verification takes far longer than sensing and planning, and the brief must not wait behind it: you would be reading yesterday's arrival time for the same information. So the brief goes out on schedule with the 🤖 section marked `drafting…`, and when the drafts land this phase **updates the same brief in place and re-runs the notifier with the same `{DATE}`**, which reuses the same `#id` rather than burning a new one.
+
+**This second notifier call is silent, on purpose (local fix, 2026-09-09, KM-14354): pass `--no-notify`.** One OS notification and one browser tab per day is the standing preference — a second real ping just to say "drafts are ready" is more interruption than it's worth for a personal daily tool. `--no-notify` still re-renders the brief HTML and re-writes the receipt (status stays `sent`), so the underlying file is correct whenever you next look — it just doesn't push a second alert or reopen a tab. You find out the drafts are ready by running `/morning` when you sit down, same as any other day with nothing pre-drafted.
 
 Two consequences worth stating plainly. **A watchdog kill mid-pre-draft costs nothing that was not already delivered**, because the plan and the verified findings left the building before drafting started. And **`dispatch.max_predrafts` is the cost ceiling**: it is what stops a bad morning from becoming an expensive one, so lower it before you conclude the loop is too costly to run.
 

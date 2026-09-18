@@ -228,9 +228,18 @@ def inline(text: str) -> str:
     return out
 
 
+TABLE_ROW = re.compile(r"^\|.*\|$")
+TABLE_SEP = re.compile(r"^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$")
+
+
+def _table_cells(row: str) -> list[str]:
+    return [c.strip() for c in row.strip().strip("|").split("|")]
+
+
 def md_to_html(md: str) -> str:
     """Deliberately small. Handles what the brief actually uses and nothing else."""
     lines, body, list_stack = md.splitlines(), [], []
+    n = len(lines)
 
     def close_lists(to: int = 0) -> None:
         while len(list_stack) > to:
@@ -243,21 +252,57 @@ def md_to_html(md: str) -> str:
             body.append(f"<p>{inline(' '.join(para))}</p>")
             para.clear()
 
-    for raw in lines:
+    i = 0
+    while i < n:
+        raw = lines[i]
         line = raw.rstrip()
         stripped = line.strip()
 
         if not stripped:
-            flush_para(); close_lists(); continue
+            flush_para(); close_lists(); i += 1; continue
         if re.fullmatch(r"-{3,}|_{3,}|\*{3,}", stripped):
-            flush_para(); close_lists(); body.append("<hr>"); continue
+            flush_para(); close_lists(); body.append("<hr>"); i += 1; continue
+
+        m = re.match(r"```(\w*)\s*$", stripped)
+        if m:
+            # Fenced code block — everything until a closing ``` is verbatim, never
+            # re-parsed as markdown. Missing before 2026-08-31: a render:section
+            # skill's output arrived wrapped in a fence (to signal "preserve this
+            # exactly"), and without this the literal ``` lines fell through to
+            # plain paragraph text — including once landing outside any <li>,
+            # nested directly in a <ul>, invalid HTML that looked like a rendering
+            # error to the reader. An unterminated fence (no closing ```) still
+            # renders everything to end-of-document as code rather than losing it.
+            flush_para(); close_lists()
+            lang = m.group(1)
+            code_lines = []
+            i += 1
+            while i < n and lines[i].strip() != "```":
+                code_lines.append(lines[i])
+                i += 1
+            i += 1  # skip the closing fence (harmless if we ran off the end)
+            cls = f' class="language-{html.escape(lang)}"' if lang else ""
+            body.append(f"<pre><code{cls}>{html.escape(chr(10).join(code_lines))}</code></pre>")
+            continue
+
+        if TABLE_ROW.match(stripped) and i + 1 < n and TABLE_SEP.match(lines[i + 1].strip()):
+            flush_para(); close_lists()
+            header = _table_cells(stripped)
+            body.append("<table><thead><tr>" + "".join(f"<th>{inline(c)}</th>" for c in header) + "</tr></thead><tbody>")
+            i += 2
+            while i < n and TABLE_ROW.match(lines[i].strip()):
+                row = _table_cells(lines[i].strip())
+                body.append("<tr>" + "".join(f"<td>{inline(c)}</td>" for c in row) + "</tr>")
+                i += 1
+            body.append("</tbody></table>")
+            continue
 
         m = re.match(r"(#{1,6})\s+(.*)", stripped)
         if m:
             flush_para(); close_lists()
             lvl = min(len(m.group(1)) + 1, 6)   # h1 in the doc becomes h2 on the page
             body.append(f"<h{lvl}>{inline(m.group(2))}</h{lvl}>")
-            continue
+            i += 1; continue
 
         m = re.match(r"[-*+]\s+\[[ xX]\]\s+(.*)|[-*+]\s+(.*)", stripped)
         if m:
@@ -265,7 +310,7 @@ def md_to_html(md: str) -> str:
             if not list_stack:
                 list_stack.append("ul"); body.append("<ul>")
             body.append(f"<li>{inline(m.group(1) or m.group(2))}</li>")
-            continue
+            i += 1; continue
 
         m = re.match(r"\d+[.)]\s+(.*)", stripped)
         if m:
@@ -273,9 +318,10 @@ def md_to_html(md: str) -> str:
             if not list_stack:
                 list_stack.append("ol"); body.append("<ol>")
             body.append(f"<li>{inline(m.group(1))}</li>")
-            continue
+            i += 1; continue
 
         para.append(stripped)
+        i += 1
 
     flush_para(); close_lists()
     return "\n".join(body)
@@ -383,8 +429,14 @@ function copyRef() {{
         "<style>body{font-family:-apple-system,Segoe UI,sans-serif;line-height:1.55;"
         "max-width:50em;margin:2rem auto 3rem;padding:0 1.2rem;color:#1a1a1a}"
         "code{background:#f4f4f5;padding:.1em .3em;border-radius:3px;font-size:.9em}"
+        "pre{background:#f4f4f5;padding:.9rem 1rem;border-radius:6px;overflow-x:auto;"
+        "font-size:.85em;line-height:1.5;margin:1rem 0}"
+        "pre code{background:transparent;padding:0;border-radius:0;white-space:pre}"
         "h2{margin-top:2rem;border-bottom:1px solid #e5e5e5;padding-bottom:.3rem}"
         "li{margin:.35rem 0}hr{border:0;border-top:1px solid #e5e5e5;margin:2rem 0}"
+        "table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:.92em}"
+        "th,td{border:1px solid #e5e5e5;padding:.4rem .6rem;text-align:left}"
+        "th{background:#f4f4f5;font-weight:600}"
         # the reference block: the handle for carrying this brief into a terminal
         ".ref{border:2px solid #2563eb;border-radius:10px;padding:.9rem 1.1rem;"
         "margin:0 0 2rem;background:#eff6ff}"
@@ -401,6 +453,8 @@ function copyRef() {{
         ".ref button.ok{background:#16a34a;border-color:#16a34a;color:#fff}"
         "@media(prefers-color-scheme:dark){body{background:#1a1a1a;color:#e8e8e8}"
         "code{background:#2d2d30}h2{border-color:#333}hr{border-color:#333}"
+        "pre{background:#242426}pre code{background:transparent}"
+        "th,td{border-color:#333}th{background:#242426}"
         ".ref{background:#11213d;border-color:#3b82f6}"
         ".ref-label{color:#7dabff}.ref-code{color:#bfdbfe}"
         ".ref button{background:transparent;border-color:#3b82f6;color:#7dabff}"
@@ -529,6 +583,11 @@ def main() -> int:
     ap.add_argument("--date")
     ap.add_argument("--webhook", default=os.environ.get("MORNING_MATTERMOST_WEBHOOK"))
     ap.add_argument("--no-open", action="store_true", help="don't open the rendered brief")
+    ap.add_argument("--no-notify", action="store_true",
+                    help="render + write the receipt, but skip the OS notification and browser "
+                         "open entirely (implies --no-open) — for a silent in-place brief update "
+                         "after an initial delivery already happened this run, e.g. Phase 2p "
+                         "landing pre-drafts. Still marks the receipt status 'sent'.")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--root", default=os.environ.get("MORNING_ROOT"),
                     help="artefact root. Overrides the layout probe; use it when the "
@@ -582,7 +641,9 @@ def main() -> int:
         "counts": summary["counts"], "top": summary["top"],
     }
 
-    if a.channel == "macos":
+    if a.no_notify:
+        pass  # render_html + write_receipt above/below already ran; no OS ping, no browser open
+    elif a.channel == "macos":
         notify_macos(summary, html, bid, not a.no_open, a.dry_run)
     elif a.channel == "mattermost":
         if not a.webhook:

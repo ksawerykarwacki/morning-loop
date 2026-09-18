@@ -57,7 +57,7 @@ If Jira returns no tickets for the person → say so clearly and suggest checkin
 Use WebFetch on `https://every.to` with prompt: "List all articles visible with title, author, date, section, and one-sentence description."
 
 ### Step B: Deduplicate
-Read `.claude/every-to-seen.md` in the current project directory (create it if it doesn't exist — start empty).
+Read `$KM_ROOT/state/every-to-seen.md` (create it if it doesn't exist — start empty). Relocated here 2026-09-01 from `.claude/every-to-seen.md`: the latter was blocked from writing 6+ consecutive runs when this skill ran inside a sub-agent session, and Andres confirmed this file should be personal, machine-local state rather than git-tracked/team-shared going forward (see `ac-state-location.md`'s convention).
 Skip any article whose title already appears in that file.
 If all articles are already seen → output "Every.to: nothing new since last check." and skip to Phase 3.
 
@@ -92,11 +92,11 @@ The "Ideas for your work" bullets must be concrete and specific — not "conside
 If an article has nothing applicable after reading → skip it silently.
 
 ### Step E: Update seen log
-Append newly fetched articles to `.claude/every-to-seen.md`:
+Append newly fetched articles to `$KM_ROOT/state/every-to-seen.md`:
 ```
 - [YYYY-MM-DD] {Title} — {URL}
 ```
-This file is shared in the repo so the whole team benefits from deduplication — once an article is covered, it won't repeat for anyone.
+This file is personal, machine-local state (relocated 2026-09-01) — it no longer benefits from git-tracked team-wide deduplication.
 
 ---
 
@@ -143,7 +143,7 @@ Every.to: nothing new since last check.
 
 1. Copy this file to `.claude/commands/team-standup.md` inside any repo you work in
 2. Run `/team-standup` or `/team-standup {your name}` from that repo
-3. The Every.to seen log (`.claude/every-to-seen.md`) is shared in the repo — commit it so the whole team shares deduplication
+3. The Every.to seen log defaults to `.claude/every-to-seen.md`, shared in the repo — commit it so the whole team shares deduplication. (Andres's own setup instead points this at `$KM_ROOT/state/every-to-seen.md` — personal state, not shared — after the git-tracked path was blocked from writing across sub-agent sessions for 6+ consecutive runs; adjust per-adopter if the same write-block shows up elsewhere.)
 
 **Requirements:**
 - Claude Code installed
