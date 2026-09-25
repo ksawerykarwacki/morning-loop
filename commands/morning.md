@@ -24,20 +24,23 @@ It is the build behind Quick Win #1 in `jtbd-tomek-2026-06-19.md` — the single
 3. **Nothing leaves the workspace automatically.** Creating/editing a Jira issue, publishing Confluence, posting to Mattermost, or sending any external message is in `permissions.never_auto`. Drafts are produced locally; shipping each one is a separate, individually-confirmed action in the review queue. This holds even after the morning approval. Delivering the brief to your own configured channel is not one of these: it moves already-sensed read-only output to you and tells nobody else.
 4. **A draft is not automation; a shipped-on-trigger job is.** Be honest in the run log about what actually ran autonomously vs. what you hand-triggered. This is the KR evidence trail.
 5. **A silent failure is worse than no automation**, because you think you are covered. Every run ends by verifying its own end deliverable (Phase 2c) and says so.
+6. **A verdict is computed, never claimed.** No agent in this run writes the words READY, VERIFIED or a rubric grid into a draft by hand. Grading is recorded as agent ids and per-check results in a stamp, and `trust.py` derives the verdict from them. On 2026-08-26 a full two-verifier grid rendered out of a session that had no subagents at all, and three drafts carried READY that nothing had checked. That failure is now structurally unavailable: READY is unreachable unless the stamp names verifier ids that exist, differ from the drafter, and differ from each other. If you find yourself typing a verdict, you are doing the thing that broke.
 
 ---
 
 ## Mode select
 
-**Decide the mode mechanically, with a shell probe, before anything else — never by eyeballing `$ARGUMENTS`.** Instruction-level matching has failed twice on OpenCode (2026-08-20, 08-24): the argument arrives as `--prep\n` via `opencode run --command morning -- --prep`, and the trailing newline made it read as empty, so the scheduled prep silently ran the interactive path with no human present. Run this exact check first — it trims the argument and honours the out-of-band `MORNING_MODE` env the runner sets as a belt-and-braces override:
+**Decide the mode mechanically before anything else, never by eyeballing `$ARGUMENTS`.** Instruction-level matching has failed twice on OpenCode (2026-08-20, 08-24): the argument arrives as `--prep\n` via `opencode run --command morning -- --prep`, the trailing newline made it read as empty, and **the scheduled prep silently ran the interactive path with no human present.** Run this first:
 
 ```bash
 ARG="$(printf '%s' '$ARGUMENTS' | tr -d '[:space:]')"; if [ "$ARG" = "--prep" ] || [ "${MORNING_MODE:-}" = "prep" ]; then echo "MODE=prep"; else echo "MODE=interactive"; fi
 ```
 
-The printed `MODE=` line is binding — obey it and never re-decide from the raw string. Trimming is harmless where the argument is already clean (Claude) and load-bearing where it is not (OpenCode).
+The printed `MODE=` line is binding. Obey it and do not re-decide from the raw string.
 
-- **MODE=prep** → run **Phase 0 → 1 → 2 → 2v → 2b → 2c → 2p**: preflight, fan-out sense, plan, verify the findings, **deliver the brief on time**, notify, health-check, then pre-draft the SOLVE work and update the same brief in place when the drafts land. This is what the scheduled pre-run invokes on weekday mornings. No shipping, no questions (no human is present).
+**If the probe cannot run, fall back and say so in one line.** It is a compound command, and some sandboxes (Tomek's unattended prep among them) refuse those. Then take the mode from the argument with surrounding whitespace stripped, treating `--prep` and `--prep\n` as identical, and honour `MORNING_MODE=prep` if it is set. **Never treat a whitespace-only argument as empty**, which is the exact bug this replaces. Trimming is a no-op where the argument is already clean and load-bearing where it is not.
+
+- **MODE=prep** → run **Phase 0 → 1 → 2 → 2v → 2s → 2b → 2c → 2p**: preflight, fan-out sense, plan, verify the findings, **deliver the brief on time**, notify, health-check, then pre-draft the SOLVE work and update the same brief in place when the drafts land. This is what the scheduled pre-run invokes on weekday mornings. No shipping, no questions (no human is present).
 - **MODE=interactive** (Tomek runs it when he sits down) → if today's plan file exists, **load it, load the pre-drafts, and skip to Phase 3**; otherwise run Phases 0 to 2c inline, then Phase 3. If the prep already delivered today's brief, do not re-send it, say so and move to the gate.
 
 **Phase order matters and it is deliberate.** The brief is delivered *before* pre-drafting starts, so a run that dies mid-draft has still delivered everything it had, and the brief never waits behind the slowest thing in the run. Never reorder these to draft first.
@@ -57,6 +60,8 @@ Probe each MCP the run depends on with its cheapest read, and print a one-line s
 | Amplitude | `get_amplitude_context` | pulse/metric signals degrade to "not checked", never estimated |
 | Granola / meeting source | the configured `meeting_source` read | `transcript_new` cannot fire; note it |
 
+**One command per Bash call.** The unattended sandbox refuses compound commands, `find -exec`, and the project venv. Bare `python3` has no `httpx`, so anything needing it degrades silently to mock data rather than failing loudly.
+
 **Before the MCP probes, validate the config against reality.** Run:
 
 ```
@@ -66,6 +71,17 @@ python3 05-automation/agent-manager/morning-loop-share/scripts/doctor.py --json
 It resolves every routing rule's named skill against the two real load paths (`<repo>/.claude/skills/<n>/SKILL.md` and `~/.claude/skills/<n>/SKILL.md`), plus `.claude/commands/` for rules that name a command rather than a skill. **A rule whose skill cannot resolve is disabled for this run and named in the preflight line**, because the alternative is what has been happening: the rule fires, finds nothing, reports no error, and the config keeps describing coverage that does not exist. It found a real name mismatch in this config on its first run (`sprint-report` where the installed skill is `sprint-reporting`), on a chain that next fires at a sprint boundary.
 
 A missing MCP narrows the run and says so. **A missing skill used to do nothing at all, silently, which is worse.**
+
+**Then ask whether this run can grade what it is about to draft.** Independence is not always available: a session without subagents cannot produce an independent verifier, and the correct response is to say so before drafting, not to discover it at the stamp:
+
+```
+python3 05-automation/agent-manager/scripts/trust.py preflight \
+  --routed {comma-separated routing ids firing today} --subagents {yes|no}
+```
+
+A non-zero exit means at least one job routed today would leave the workspace and cannot be independently verified this run. That is not a reason to abort: it is a reason to draft it, label it honestly, and never let it render READY. Carry the line into the preflight output, because a run that quietly downgrades its own grading is exactly the shape that cost a retraction.
+
+Print: `PREFLIGHT: ... · config ✅ 13/13 rules resolve · trust ⚠️ 2 external jobs, no independent verifier available this run`.
 
 Print: `PREFLIGHT: Atlassian ✅ · M365 ✅ · Amplitude ✅ · Granola ⚠️ degraded (reason) · config ✅ 13/13 rules resolve`. A **denied tool name is a different failure from an absent server**, so distinguish them: the fix differs (allowlist entry vs reconnect). If a probe fails on a *name*, check whether the allowlist holds a stale alias for that tool and name the correct one in your report. Degradations never abort the run; they narrow it honestly.
 
@@ -109,7 +125,7 @@ This is the direct fix for the loop's most repeated defect. Four separate runs m
 | `decision_log` | Confluence, current **and** previous sprint page | decisions since the last run, plus the reverse check: consequential events with no log entry | cheap |
 | `inbox` | Microsoft 365 | `attention_triage` buckets per its config block | cheap |
 | `reading` | Every.to | new items or an explicit "nothing new" | cheap |
-| `ads` | ExoClick | campaign status including `session_start` totals, last-touch and first-touch | cheap |
+| ~~`ads`~~ | ExoClick | **off since 2026-09-24**: no ads running there. Do not run it, do not list ExoClick as a degraded source, do not report campaign status. The one exception is the leaked-token rotation in hygiene, which is a security item and stays until it is done. Re-enable only when it is back in `sense.probes` | n/a |
 
 **Meeting capture is scoped, and the scope is a squad agreement, not a technical limit (set 2026-08-20).** Maria runs and records the squad ceremonies: standup, refinement, sprint review, retro and planning. **The loop does not write note files for those**, because a second unofficial record of a ceremony someone else owns creates two sources of truth and the loop's copy is the weaker one. It still *reads* her ceremony pages, which is where the Decision Log gap checks come from.
 
@@ -125,31 +141,6 @@ Collect the probe results, drop the nulls, and merge. This step is a few lines o
 
 One probe failing never aborts the run. It narrows it, honestly, and the preflight line says which.
 
-### 1d · Routing-table skills — dispatched here too, not just planned in Phase 2 (added 2026-08-25, local fix, personal loop only)
-
-**The fixed 9 probes above are not the only things this phase senses.** Every firing `routing` rule with `bucket: auto` and a non-null `skill:` (e.g. a personal daily-habit tool wired in via config) gets dispatched **right here, in this same fan-out**, as its own bounded-context sub-agent — not deferred to "mention it somehow" in Phase 2. Phase 2 plans what to do with sensed material; it does not itself go sense anything. A routing rule that never gets an explicit dispatch instruction is a routing rule the loop will treat as a hint rather than a command, and that is exactly how a named skill silently never runs.
-
-Two things this dispatch must do, confirmed live as the two ways it silently failed when this instruction was missing entirely:
-
-1. **Invoke the named `skill:` by its exact name — never substitute a different tool**, even one that seems topically related or is already connected. Resolve and run the literally-named skill or command (via the Skill/Command tool), the same discipline as the fixed probes. Confirmed live: `skill: ac-inbox` never actually ran because the model reached for an already-connected Mattermost MCP connector instead — the wrong tool, just a thematically close one. `doctor.py` only proves a named skill *resolves*; it does not prove a dispatch actually *invoked* it. If the named skill or command cannot be found or invoked for real, that is a degradation named in the preflight line, never a silent swap.
-2. **Capture that skill's full output verbatim, unsummarised, the same as a probe's evidence.** Whether it gets compressed for the brief is a Phase 2 rendering decision (`render: bullet` vs `render: section`, see below) — it is not something to pre-summarise here. Confirmed live: without this, a 7-day timesheet grid and a categorized email digest both arrived at Phase 2 already thinned down to a sentence, so even a correct rendering decision downstream had nothing full left to render.
-
-Route these through the same tiering as probes: routing-rule skills doing bounded extraction can use `sense.probe_model_cheap`; anything closer to judgment stays on the session model.
-
-### 1e · Confluence direct mentions (personal addition, ported from v2's KM-14119 work, 2026-09-01)
-
-**Not one of v3.1's 9 fixed probes, and not covered by anything else in this package** — Confluence mentions are explicitly named in `ATTENTION-TRIAGE.md` as a known gap, still unbuilt there. This is a real, validated feature from the old package, ported here as inline logic (like `routine_health`/`ceremony_capture` above), not delegated to an external skill.
-
-Run `mention = "{owner's account ID}" order by lastmodified desc` via Confluence CQL — ground truth, independent of email-notification/read state, so it never misses a mention just because the notification email was already read or archived. Resolve the owner's account ID the same way `ac-timesheet` does: check `$JIRA_ACCOUNT_ID` first, else `atlassianUserInfo`.
-
-**Filter out noise before surfacing anything:** skip any result whose title matches a known meeting-note pattern (`Daily`, `async Standup`, `Standup`, `Refinement`, `Planning`, `Design & Refine`, `Design Session`, `Retro`, `Retrospective`, `Review`, `Demo`, `AMA`) — those pages tag every attendee by design and are already covered by the `meetings` probe; including them here would just be the same content twice.
-
-**Checkbox-aware, not a one-time-seed blanket rule.** Fetch each surviving result's full body (`getConfluencePage`) and check for Confluence task-list syntax (`- [ ]` / `- [x]`) near the mention:
-- **Has a checkbox assigned to the owner:** a genuine open/closed action item with state that already lives in Confluence itself — don't invent a parallel "dismissed" flag. Re-check the page live every run and keep surfacing it for as long as the box is unchecked; stop the moment Confluence shows it checked, which the owner can do directly in Confluence, not only through this loop.
-- **Plain mention, no checkbox found:** nothing to track — seed it once into `paths.processed_mentions` and never resurface it, same model as `meeting_source`'s dedup.
-
-Wired in as the `confluence_mentions` routing rule (`bucket: auto`, `render: section` — a checkbox action item is exactly the kind of single, load-bearing fact that a bullet would still preserve fine on its own, but rendering it as its own section keeps it visually as prominent as the other personal-tool sections rather than getting lost in "Already done"). State file: `paths.processed_mentions`.
-
 ---
 
 ## Phase 2 — PLAN (the manager brain)
@@ -163,6 +154,22 @@ The loop's job is to close things, not to describe them. A finding that gets re-
 | **SOLVE** | The agent has everything it needs to do the work. | Put it in the draft bucket and **do it** on approval. Do not ask about it. |
 | **ASK** | The agent knows the fix but is missing exactly **one** fact. | Ask **one closed question** whose answer unblocks the work. Never restate the problem instead. |
 | **HUMAN** | Genuine judgment, relationship, or authority. | Hand it over cleanly with the context already gathered. |
+
+**Write the ASKs to a file he answers inline, not into the brief as prose.** This is the fix for the defect that has blocked the loop for a month: between 2026-08-28 and 2026-09-24 the loop asked 9 things and recorded 0 answers, not because he was unwilling but because answering meant a second trip to a terminal.
+
+```
+python3 05-automation/agent-manager/scripts/asks.py --date {DATE} render --in /tmp/asks-{DATE}.json
+```
+
+Each ask is `{question, why_it_matters, ask (who can answer), options[] OR recommendation, evidence[], carried}`. **`why_it_matters` is mandatory and names what changes depending on the answer**; if nothing changes it is not a blocker and does not belong in front of him. **Options appear only where the candidate answers change the outcome in materially different ways.** Where there is one defensible answer, drop the list, set `recommendation`, and the question becomes a confirmation. A one-item options list is refused. A clean run gets zero questions, and the file is still written, because absence and zero must not look identical.
+
+**Every run, read last run's answers first and carry the rest:**
+
+```
+python3 05-automation/agent-manager/scripts/asks.py --date {DATE} carry --from {LAST_RUN_DATE}
+```
+
+An answered ask is **recorded, not just consumed**: draft it into the action queue as `kind: question` with `derived_from` pointing at the ask, so the answer reaches provenance and the circle closes. An unanswered one comes forward with its carry count incremented and enters the ladder below.
 
 **The ASK type is the important one and the easiest to get wrong.** "This is 21 days old and nobody has answered it" is not an ASK, it is a complaint. The ASK is *"Did KM-13557's redirect ship at 100% or was it rolled back?"* One fact, closed, answerable in a sentence, and on receiving it the agent proceeds without further instruction. If you cannot phrase the missing fact as a single closed question, it is not an ASK: either it is SOLVE (you already have enough) or HUMAN (it needs judgment, not a fact).
 
@@ -224,12 +231,6 @@ Walk every rule in `routing` and decide if it fires today:
 
 For each firing rule, build a **plan item**: `{job, skill, bucket, external_action, why-it-fired, est. time saved}`. Sort into the four buckets and write the **plan file** (`paths.plan_file`) using the layout below.
 
-**Rendering a `bucket: auto` rule's already-sensed output — invocation happened back in 1d, this is only about how it appears in the brief (added 2026-08-25, local fix, personal loop only — proposed upstream on KM-14354, not yet part of the shared package).** An optional `render:` field on the rule controls this. Default is `render: bullet` — a one-line summary folded into "Already done," fine for anything that's genuinely a single fact (a count, an "N new"). Set `render: section` on a rule whose 1d output is multi-item or structured (a table, a categorized list, several distinct entries): folding that into one bullet silently discards the individual items that made the job worth running.
-
-**This config currently has exactly five `render: section` rules — `timesheet_grid`, `email_digest`, `mattermost_inbox`, `blocked_ticket_watch`, `confluence_mentions` — and the template below names their sections explicitly rather than describing a generic loop, on purpose (2026-08-26, extended 2026-09-03 per KM-14354 when `blocked_ticket_watch` was found still folded into a bullet despite carrying `render: section` in config).** A generic "one heading per render:section rule, figure out the rest" instruction was tried first and did not hold on a real unattended run — the plan file still folded all three into "Already done" bullets despite the rule and the instruction both being correctly in place, confirmed by comparing a forced/prompted re-test (worked) against the next real scheduled run (didn't). Named, concrete placeholders are what actually held reliably for the equivalent problem in the old v2 package — so this local fix trades genericity for reliability on purpose. If a sixth `render: section` rule gets added later, add its own named heading here the same way rather than trusting a loop-shaped instruction to cover it.
-
-**These five headings are mandatory whenever their rule fires — never optional, never replaced by a bullet, regardless of how routine or quiet that day's output is.** Before writing "Already done," check off `timesheet_grid` / `email_digest` / `mattermost_inbox` / `blocked_ticket_watch` / `confluence_mentions` against this list — if any fired in 1d, its full output goes ONLY in its own named heading below, never also (or instead) as a line in "Already done." A quiet day ("nothing needs a reply", "nothing blocked") still gets its full heading, just with less under it — quietness is not a reason to compress it back into a bullet. `blocked_ticket_watch` and `confluence_mentions` in particular will often have nothing to report most days — that quiet result still gets its own heading, not silence.
-
 ```markdown
 # Morning Plan — {DATE} ({weekday}, sprint {n}/{len}, {phase})
 
@@ -252,23 +253,6 @@ For each firing rule, build a **plan item**: `{job, skill, bucket, external_acti
 - Every.to: {n new / nothing new}
 - Jira sprint: {counts; stale flags}
 - Open commitments: {n carried}
-{one bullet per fired `bucket: auto` rule with render: bullet (the default) ONLY — never timesheet_grid/email_digest/mattermost_inbox/blocked_ticket_watch/confluence_mentions, those never appear here, not even as a summary line}
-{if any of the five named render:section rules did NOT fire today (signal didn't match), say so explicitly here in one line each — e.g. "ac-inbox: not run this signal" — never just silently absent}
-
-## 📊 `ac-timesheet` — timesheet_grid (skip this whole heading only if the rule didn't fire today)
-{the rule's full 1d output, verbatim — the grid, Rippling status, zero-hour/done-ticket offers, all of it}
-
-## 📧 `ac-email-digest` — email_digest (skip this whole heading only if the rule didn't fire today)
-{the rule's full 1d output, verbatim — every category, every item, not a count}
-
-## 📬 `ac-inbox` — mattermost_inbox (skip this whole heading only if the rule didn't fire today)
-{the rule's full 1d output, verbatim — needs-reply list and FYI list both, not a channel count}
-
-## 🔓 `ac-blocked-watch` — blocked_ticket_watch (skip this whole heading only if the rule didn't fire today)
-{the rule's full 1d output, verbatim — new comments on BLOCKED tickets, or "nothing new on blocked tickets" if quiet}
-
-## 📌 Confluence Mentions — confluence_mentions (skip this whole heading only if the rule didn't fire today)
-{every open checkbox action item (re-checked live) plus a note of any newly-seeded plain mentions this run — or "nothing open" if there are open checkboxes to report but none currently unchecked}
 
 ## Run economics
 - Jobs the agent can draft today: {n}  ·  est. time saved if you ship them: ~{x}h
@@ -286,6 +270,8 @@ So before the brief is delivered, **every claim that asserts a status, a number,
 
 ### The gate
 
+**Dispatch every sub-agent as `general-purpose`, never as the pinned types.** `sense-probe`, `claim-verifier`, `disagreement-judge` and `job-drafter` each declare a `tools:` list, and an agent with a `tools:` list gets **only** those tools: no MCP, and `ToolSearch` will not surface MCP inside it either. So a verifier of that type cannot re-query Jira, Confluence or Amplitude, which is the single thing a verifier exists to do. Verified 2026-09-07: 7 of 9 probes returned live evidence through `general-purpose`, and the only 2 that came back degraded were the 2 given a pinned type. Keep the no-write rules as prompt constraints, never as a `tools:` list.
+
 Dispatch verifiers in parallel, one per claim, on `quality.verifier_model`. A verifier sees **only** the claim, its evidence excerpt, and its source. It never sees the plan, the brief, or the agent that produced the claim. Its job is to kill the claim, not to appreciate it.
 
 **The verifier re-runs the query itself. It never grades the claim against the probe's own output.** Checking a probe's claim against that probe's notes only establishes that the probe agrees with itself, which is how "KM-14064 has nine subtasks" reached a delivered brief when the true answer was six. The verifier goes back to Jira, Confluence or Amplitude and reads the row for itself. This holds however many claims are gated: **batching claims into one verifier call to save tokens silently turns the gate back into self-agreement**, so batch by source if you must, never by claim.
@@ -302,6 +288,21 @@ Dispatch verifiers in parallel, one per claim, on `quality.verifier_model`. A ve
 
 A **KILLED** claim never reaches the brief. It is logged in the run log as `killed: {claim} ({why})`, because a claim the loop generated and then rejected is real evidence about the loop and is exactly what the offline skill-improvement pass needs.
 
+### Corrections propagate to the drafts, or nothing ships
+
+**A claim killed or corrected after a draft was written does not stay in Phase 2v.** On 2026-08-26 the loop discovered mid-session that the Icebreakers experiment object existed, recorded the correction in the run log, and the GC update drafted **in that same session** still told the room in three places that it did not exist, naming two queries as evidence. Note the shape: that draft's stamp had *passed* `absence_names_its_query`. A false absence with provenance attached is the most dangerous output this loop can make, because the provenance is what earns belief.
+
+So every correction, whenever it is learned in the run, is registered:
+
+```
+python3 05-automation/agent-manager/scripts/trust.py correct add \
+  --was "{the claim as drafted, verbatim}" \
+  --now "{what is actually true}" \
+  --source "{where the correct value was read}"
+```
+
+This puts **every draft already stamped this session on `HOLD`** and names the ones whose text literally carries the wrong claim. Nothing renders READY out of a session with an open correction. Clear each one only after you have actually patched the draft (`correct apply --id c1 --job {job}`) or established it does not apply (`correct dismiss --id c1 --job {job} --reason "..."`, and the reason is mandatory). Re-run the drafter for the patch; do not hand-edit the claim out and leave the surrounding argument standing on it.
+
 ### Cross-probe findings (this is where the FINDINGS section comes from)
 
 The probes ran blind to each other, so contradictions between them are visible only here, and they are the most valuable output the loop produces. Compare surviving claims across probes and surface:
@@ -314,6 +315,74 @@ Do not spawn an agent per pair. Compare the claim lists directly, and dispatch a
 
 ---
 
+## Phase 2s · COACH + SHARPEN (two short sections, both earned, both capped)
+
+These are the two things Tomek asked the loop to do for him rather than for his work. They run after the findings are verified and before delivery, because they belong in the brief and the brief is what he reads.
+
+### 2s·a Coaching, every morning, one nudge
+
+> *"the coaching should also look at my past decisions, actions, goals and help me see the forest from the trees and the other way around when I need to look wider or narrower... I'm a fan of stoicism so I'm really interested in focusing on what I can control and change, and I have a growth mindset so I want to keep getting better every day... even ok for the coach to have a long term plan that I'm not aware of and it's helping me achieve that plan by the daily morning loop coaching. I don't want to have to call the coach."*
+
+**Ask the engine first. It decides what and how, you write the words.**
+
+```
+python3 05-automation/agent-manager/scripts/coach.py --date {DATE} due --json
+```
+
+It returns the **thread** due today (from `coach/plan.md`, by priority and staleness, never the same thread two mornings running, parked threads skipped), the **zoom** (`wide` or `narrow`, measured from the ticket spread across the last five morning plans, not chosen), its reason, the open observations on that thread, and the last three nudges so you do not repeat one. `{"nudge": false}` means nothing is due. **Render the section anyway, with one line saying why.** Absence and zero must never look identical: a quiet day and a broken `coach.py` currently produce an identical brief, which is the silent-failure class this loop exists to remove. `COACHING: nothing due, every thread was raised too recently` is information. Do not overrule the zoom because another angle feels more interesting.
+
+**Then write the nudge, and record it. The recording is what enforces the frame:**
+
+```
+# Write to /tmp/nudge-{DATE}.json, then pass the path. No heredocs in the prep sandbox.
+python3 05-automation/agent-manager/scripts/coach.py --date {DATE} nudge --zoom {zoom} --in /tmp/nudge-{DATE}.json
+# the file's contents:
+{"thread": "{thread id}",
+ "observation": "{what you actually see, with the evidence in it}",
+ "in_your_control": "{the part he can change today}",
+ "not_in_your_control": "{the part he can put down, named so he stops paying rent on it}",
+ "today_action": "{one thing, doable between the brief and lunch}",
+ "evidence": ["{run-log line / ledger row / brief id / file path}"],
+ "closes_observations": ["{observation ids this resolves}"]}
+```
+
+`coach.py nudge` **rejects** a nudge missing any of the three frame fields, and rejects an observation that repeats an earlier one word for word. Both rejections are correct: without the frame it is an observation, and observations go to `coach.py observe`; repeated verbatim, coaching becomes wallpaper.
+
+Four rules for the writing itself:
+
+- **Evidence or nothing.** A run-log line, a ledger row, a brief id, a date. He will check. An unfalsifiable observation costs the whole thread its credibility.
+- **Stoic means practical.** `not_in_your_control` exists so he can put something down, not so the nudge can sound wise.
+- **Growth means the delta.** "You closed three of four findings this week against one of six last week" is coaching. "You are good at detection" is a compliment and does nothing.
+- **One ask, today-sized.** If it cannot be done before lunch it is a project, not a nudge.
+
+**The plan is not recited.** `coach/plan.md` holds the long-term threads and the brief never quotes it, which is what he asked for. It is a file in his own repo and `coach.py plan` prints it in full, so it is undisclosed by default and never withheld on request. Never claim there is no plan.
+
+### 2s·b Product feedback, occasionally, and usually not at all
+
+> *"product feedback should be there occasionally when it's needed, not always. I don't make product decisions every day, but I know sometimes I need to think about some upcoming experiment, feature or problem users have and I need help sharpening my thinking on that."*
+
+```
+python3 05-automation/agent-manager/scripts/sharpen.py --date {DATE} candidates --json \
+  [--signal experiment="{id + why it is live}"] [--signal sprint_goal="{goal}"] \
+  [--signal meeting="{a decision meeting today or tomorrow}"]
+```
+
+Pass the signals this run actually found: an experiment the pulse flagged, a goal being set at a sprint boundary, a decision meeting on the calendar. It also watches `04-features/` on its own. **`{"challenge": false}` is the normal answer.** **Render the section anyway with the reason**, for the same rule as above: `WORTH SHARPENING: nothing, no decision signal` is information, an absent section is not, and a silently broken `sharpen.py` must not look like a quiet week. Do not force a challenge, do not save one up, and never argue with the cooldown: a challenge every morning is the thing he explicitly did not ask for.
+
+When one fires, write **one closed question** about the specific claim, number or assumption, and record it:
+
+```
+# Write to /tmp/challenge-{DATE}.json, then pass the path.
+python3 05-automation/agent-manager/scripts/sharpen.py --date {DATE} fired --in /tmp/challenge-{DATE}.json
+# the file's contents:
+{"topic": "{short slug}", "question": "{one closed question, ending in a question mark}",
+ "why_now": "{why this morning is the moment}", "evidence": ["{what makes it real}"]}
+```
+
+The recorder **refuses** a generic prompt. `have you considered the risks`, `what are the trade-offs`, `is this the right approach` are all rejected, because a question that could be asked about anything was not asked about this. Name the claim you are testing. The shape to aim for: *"Icebreakers is the sprint goal and its experiment object has zero metrics attached, so which single number will you read on day 3 to decide whether the learning launch taught you anything?"*
+
+---
+
 ## Phase 2b — DELIVER (the brief goes to you; you don't go to it)
 
 A plan file on a machine you are not sitting at helps nobody. After the plan file is written, **deliver the brief to `delivery.channel`** on every run, in both modes. This is the step that makes the loop proactive instead of something you have to remember to trigger.
@@ -321,20 +390,16 @@ A plan file on a machine you are not sitting at helps nobody. After the plan fil
 **Deliver with `delivery.notifier_script`.** One command, whatever the channel:
 
 ```
-python3 {delivery.notifier_script} \
-  --brief {paths.plan_file} --date {DATE} --channel {delivery.channel}
+python3 05-automation/agent-manager/scripts/notify.py \
+  --brief {paths.plan_file} --date {DATE}
 ```
-
-Pass `--channel` explicitly. The script also reads `delivery.channel` itself when
-the flag is omitted, but a phase that says it delivers to `delivery.channel` should
-name it in the command: until 2026-09-03 neither did, the script defaulted to
-`macos`, and a config that said `file` produced a receipt that said `macos`.
 
 **Zero setup is a hard requirement of this phase, not a preference.** A delivery step that needs an account is a step most people never complete, and an undelivered brief is worth exactly as much as no loop. `macos` is the default: a native notification plus the brief rendered as a local web page, nothing to sign up for, works offline. `mattermost` costs one webhook URL and reaches a phone.
 
 - **Report the outcome from the receipt, not from the fact that you ran the command.** The script always writes `05-automation/agent-manager/delivery-receipts/{DATE}.json`, on success and on failure. On a non-zero exit, read the receipt's `error` field and surface it verbatim. A failed delivery summarised as "delivered" is the precise failure this phase exists to prevent.
 - **The notification is one line**, carrying the counts and the single top item. Its job is to get you to open the brief, not to be the brief.
 - **The brief itself is the whole update**, in the order below. Never a teaser with a link and nothing else. The script renders the plan file's markdown, so a well-written plan file becomes a well-formatted page: write the plan file properly and delivery takes care of itself.
+- **Call things by their name, never by their id (Tomek, 2026-09-24).** A ticket reads as its plain name ("the shortened signup build", "the Icebreakers second read"), and an experiment reads as its name ("the intent-driven signup experiment", "Icebreakers", "Plus retention"), never as `KM-14881` or `10442808`. He does not know what the numbers are, and a name is what lets him answer in one read. If a key is needed for traceability, put it once in brackets after the name, e.g. "the shortened signup build (KM-14881)", and never as the subject of a sentence. Amplitude object ids and Confluence page ids stay in the evidence and source lines, out of the prose. The same goes for internal jargon: if a phrase like "the gate's signup prompt" needs a gloss to be understood, write the gloss instead of the phrase. **This is enforced, not just asked for:** `.claude/hooks/house-rules.mjs` denies any Write or Edit to `morning-plan-{DATE}.md` that has a bare `KM-` key or an 8-digit experiment id outside a `Source:`/`Evidence:` line, in both `--prep` and interactive runs. When it fires, rewrite the line with the name; do not route the write through Bash to get around it. To find a name, read the ticket summary from Jira or the experiment's `name` from Amplitude; never make one up.
 - **`#id`.** The script numbers each brief and puts it in the title, which is what makes `morning loop #21` and `/brief 21` work later. Same date always reuses the same id, so a re-delivery never burns a number.
 
 ```
@@ -364,10 +429,30 @@ Window: {lookback} · Sources: {preflight line, degradations named}
   - Sprint: {counts; stale flags}   - Pulse: {1-line health}
   - Commitments: {n carried}        - Meetings captured: {n written to notes}
 
+── OPEN QUESTIONS ──   ({n} asked, {a} answered since last run, {o} open)
+Answer in {questions file path}. No command, type under **Answer:** and save.
+{the one that has carried longest, with its count}
+
+── COACHING ──   (one, today only. A different thread tomorrow.
+                 ALWAYS rendered: "nothing due, and why" is information, absence is not.)
+{the observation, with its evidence}
+In your control: {the part you can change today}
+Not in your control: {the part you can put down}
+Today: {one thing, doable before lunch}
+
+── WORTH SHARPENING ──   (usually "nothing, no decision signal", which is still rendered)
+{one closed question} · why now: {the signal}
+
 ── FINDINGS THIS RUN ──
 {anything no single source showed: contradictions between sources, corrections to
  previous runs, a chain that only appears when two signals are read together.
  If a prior run's claim is now wrong, say so plainly and say what replaced it.}
+
+── TRUST ──
+Packet: {paths.review_packet}   (every draft, its verdict, its ship action, in one file)
+Grading: {n} stamped · {counts by verdict} · {n} UNSTAMPED · {n} open corrections
+Every verdict above is computed by trust.py from recorded agent ids. No agent wrote one.
+Out under your name since the last run: {shipped.py list --since; or "nothing recorded"}.
 
 ── HONESTY LINE ──
 Truly autonomous this run: {what actually ran unattended}. Shipping: gated, nothing sent.
@@ -383,7 +468,10 @@ Other channels behave the same way: `confluence_page` updates one rolling page i
 
 ## Phase 2c — NOTIFY + HEALTH (verify your own end deliverable)
 
-**Notify — already done, do not send a second one here (clarified 2026-08-27, local fix, personal loop only).** The one-line notification this section describes is the *same* notification `delivery.notifier_script` already sent as part of Phase 2b — `notify.py`'s own delivery mechanism produces exactly this "counts + top item" line via the OS notification. **Do not call `osascript` or any other notification mechanism directly in this phase, and do not re-invoke the notifier script here either.** Confirmed live (2026-08-27): treating this as a separate step produced two real notifications for one brief, plus a delivery claim inside the session that didn't match what was actually on disk when checked immediately after — the same "confidently wrong" pattern as a fabricated file-write claim. If Phase 2b's delivery succeeded, this line's job is already satisfied; if it didn't, that's a Health finding below, not a second delivery attempt.
+**Notify.** One line on `notify.channel`, no more. Its job is to get you to open the brief, not to be the brief:
+```
+☀️ Morning brief ready — {n} drafts, {m} decisions, {k} meetings. Top: {the one item}.
+```
 
 **Health (`health.enabled`).** Before the run ends, verify the **end deliverable exists**, not that the script exited 0:
 1. The plan file was written for `{DATE}`.
@@ -414,7 +502,93 @@ So when `dispatch.predraft_in_prep` is true, the unattended prep **does the SOLV
    Run #30 (2026-08-21) is the worked example. It fired on time, delivered the brief unattended, and wrote 5 drafts between 08:31 and 08:40 before the watchdog killed it at 08:42. **None of the five carried a verify stamp and the brief still read `drafting…`**, because verification and the brief update were both batched behind the last draft. So a kill that should have cost one unfinished item cost the grading of all five, and v3's promise turned from *finished, graded drafts waiting for a yes* into *finished, ungraded drafts*, which is most of what v2 already did.
 
    Verified per item, the same kill leaves 5 graded drafts and one missing. Ordering also matters: **shortest job first inside the priority band.** In run #30 the largest artefact finished last and the smallest planned item never ran at all, and nothing reported its absence.
-4. Skip, and say why, any item whose inputs are missing (a degraded probe, an unanswered ASK). A skipped item is listed in the brief as skipped, never silently dropped.
+4. **Stamp it, and let the stamp decide the label.** The moment a draft's verification finishes, record how it was graded and let `trust.py` compute the verdict. Do not write a label into the file yourself.
+
+   ```
+   # Write this JSON with the Write tool to /tmp/stamp-{job}.json FIRST, then pass the PATH.
+   # A heredoc with braces and quotes is refused by the unattended sandbox as "expansion
+   # obfuscation". Every one of these scripts takes --in <path> as well as --in -.
+   python3 05-automation/agent-manager/scripts/trust.py --date {DATE} stamp --in /tmp/stamp-{job}.json
+   # the file's contents:
+   {"job": "{routing id}", "skill": "{skill}", "external_action": "{from the routing rule}",
+    "artifact": "{path under paths.review_dir}",
+    "destination": "{the actual page id / ticket / channel it would go to}",
+    "drafter":  {"agent_id": "{the drafting sub-agent's id}", "model": "{model}"},
+    "verifiers": [{"agent_id": "{verifier 1 id}", "checks": [{"id": "{check}", "result": "pass|fail|n/a", "severity": "block|normal", "reason": "{one line}"}]}],
+    "judge": {"agent_id": "{judge id}", "rulings": [{"id": "{check}", "result": "pass|fail"}]},
+    "requeried": [{"source": "{JQL / chart id / page id}", "at": "{HH:MM}"}],
+    "carried":   [{"claim": "{what was carried}", "from_brief": {id}, "age_days": {n}}],
+    "expires":   [{"what": "{the cells or claims}", "why": "not re-verified this week"}],
+    "unavailable": ["{probe that could not run}"]}
+   ```
+
+   The command writes the stamp, computes the verdict and injects the provenance header at the top of the draft. **Every field is evidence, not decoration.** `requeried` is what the reader can skim past; `carried` and `expires` are what they must not publish over; `unavailable` is why the draft is thinner than usual. An empty `verifiers` list is the honest record of a run with no subagents, and it renders `UNVERIFIED` rather than a grid.
+
+   A drafted item with no stamp is listed in the review packet as **UNSTAMPED**, which is a defect, not a neutral state.
+
+   **Meeting output is the exception to "one draft, one file", and it has its own queue.** When `meeting_debrief` (or any rule with `ticket_queue: true`) produces anything actionable, it does not go into the debrief prose where it gets re-typed by hand or lost. **All three kinds go through `tickets.py`**, which renders one reviewable file grouped by meeting, with a checkbox per item: six kinds, each with its own destination and its own rule. Set `kind` on every item:
+
+   | kind | goes to | the rule that gets it refused |
+   |---|---|---|
+   | `ticket` | Jira | the four house headers, the stub rule |
+   | `decision` | Decision Log, or the Design Decisions table via `home: design_table` | hedged, or an action, or names a speaker from a paraphrase |
+   | `update` | a named channel | no channel, an unsourced number, a hygiene item |
+   | `research` | a note or a spike | no `changes_what`, which makes it curiosity |
+   | `question` | one named person | not closed, two questions, no person, unblocks nothing |
+   | `idea` | an Idea Engine ticket | no riskiest assumption, which makes it a preference |
+
+
+   ```
+   # Same rule: Write the JSON to /tmp/actions-{DATE}.json, then pass the path.
+   python3 05-automation/agent-manager/scripts/tickets.py --date {DATE} draft --in /tmp/actions-{DATE}.json
+   # the file's contents:
+   [{"kind": "ticket", "title": "[FE] ...", "issue_type": "Story", "role": "{accountable role}",
+     "epic": "KM-...", "verified_keys": ["{every KM key you confirmed on board 1847/1946}"],
+     "context": "...", "problem": "...", "what_we_need": "...", "why_this_matters": "...",
+     "acceptance_criteria": ["..."],
+     "source": {"meeting": "...", "when": "...", "fidelity": "verbatim|summary",
+                "excerpt": "{quote the meeting, verbatim}"}},
+    {"kind": "decision", "decision": "{what was decided, stated as decided}",
+     "rationale": "{why, because the log is read six weeks later}",
+     "decided_on": "YYYY-MM-DD", "binds": "{the role or group it constrains}",
+     "source": {...}},
+    {"kind": "update", "audience": "{GC Confluence | Escort CRM | KM Growth}",
+     "substance": "...", "detail": "...", "sources": ["{every number needs one}"],
+     "source": {...}},
+    {"kind": "research", "question": "...", "owner": "{role or person}",
+     "changes_what": "{the decision or action that changes depending on the answer}",
+     "source": {...}},
+    {"kind": "question", "question": "{one closed question ending in ?}", "ask": "{one person}",
+     "unblocks": "{what proceeds once answered}", "source": {...}},
+    {"kind": "idea", "title": "...", "problem": "{who faces it, in their situation}",
+     "proposed_solution": "...", "strategic_alignment": "{the KR, or plainly none}",
+     "riskiest_assumption": "{the thing the next step has to test}", "source": {...}}]
+   ```
+
+   **Link every item to what caused it.** Set `derived_from` to the durable ids it follows from
+   (`["2026-09-16/i1"]`), and `supersedes` on a decision that replaces an earlier one. Durable ids
+   are `{DATE}/{id}` and are stamped at draft time, because `t1` collides across days and so cannot
+   be pointed at. This is what makes the full circle readable later: `tickets.py chain --uid
+   2026-09-16/i1` walks the meeting it came from, what it spawned, and what came of each.
+
+   Two rules are enforced by that command rather than asked of you, because both have already put a bad ticket into Jira:
+
+   - **The four house headers**, `**Context:**`, `**Problem:**`, `**What we need:**`, `**Why this matters:**`. Measured on 2026-08-26: 8 of 10 real ticket drafts carried none of them.
+   - **A decision must be decided.** `We might cap it` is a leaning and `We should cap it` is an action. Neither belongs in the Decision Log, which records why the world is the way it is. The first is not decided yet; the second is a ticket. Both are refused.
+   - **No speaker named from a paraphrase.** A decision drawn from a summary-level source records what the room decided and never who said it. Same root cause as the stub rule.
+   - **An update names its channel and sources its numbers**, and a hygiene-queue item never becomes an update, because `hygiene.never_external` is set and the whole point of that queue is that the finding is true, actionable and not for the room.
+   - **The stub rule.** Set `fidelity` honestly. Granola transcripts are summary-level paraphrase, so acceptance criteria written from one are invented. A `summary` source ships as a **STUB with exactly one criterion**, `confirm scope with {role} before estimating`, and five invented ones are a validation error, not a nicer draft. A stub someone confirms in 40 seconds beats a plausible ticket nobody trusts.
+
+   Also required: a verbatim `source.excerpt` on every ticket, a role tag in the title with the assignee left empty, and every referenced KM key listed in `verified_keys` after you actually confirmed it sits on board 1847 or 1946. `KM` is shared. A blocked ticket is rendered with its reason and **cannot be approved until it is fixed**, so re-draft it rather than arguing with the checker.
+5. Skip, and say why, any item whose inputs are missing (a degraded probe, an unanswered ASK). A skipped item is listed in the brief as skipped, never silently dropped.
+6. **Build the review packet, and rebuild it after every stamp.** One file holds every draft, its computed verdict, its ship action and its full text, so the review is a single pass down one page rather than a directory crawl:
+
+   ```
+   python3 05-automation/agent-manager/scripts/trust.py --date {DATE} packet
+   python3 05-automation/agent-manager/scripts/trust.py --date {DATE} status
+   ```
+
+   The packet also pulls the decisions, your-turn items and findings out of the plan file, so it is the whole morning in one place. Its path goes in the brief. Rebuild it whenever a stamp, a correction or a revision changes anything: it is generated, never hand-edited, and anything typed into it is lost on the next rebuild.
 5. **Nothing ships.** Not one external action. `never_auto` is untouched by this phase, and a draft sitting in `agent-drafts/` has left the workspace exactly as much as it did before, which is not at all.
 
 The brief then carries the drafts, so the 🤖 section reads:
@@ -427,9 +601,7 @@ The brief then carries the drafts, so the 🤖 section reads:
 
 **This changes the honest accounting, in the direction that matters.** A job that was scheduled, drafted unattended, cleared every check, and shipped without a heavy rewrite is the definition the run log has been using for "truly autonomous" all along, and until now the loop has structurally been unable to produce one, because drafting could not happen unattended. Keep the bar exactly where it is. A pre-drafted item that Tomek rewrites before shipping is still tooling coverage, and the run log still says so.
 
-**This phase runs after delivery, on purpose.** Drafting six items with independent verification takes far longer than sensing and planning, and the brief must not wait behind it: you would be reading yesterday's arrival time for the same information. So the brief goes out on schedule with the 🤖 section marked `drafting…`, and when the drafts land this phase **updates the same brief in place and re-runs the notifier with the same `{DATE}`**, which reuses the same `#id` rather than burning a new one.
-
-**This second notifier call is silent, on purpose (local fix, 2026-09-09, KM-14354): pass `--no-notify`.** One OS notification and one browser tab per day is the standing preference — a second real ping just to say "drafts are ready" is more interruption than it's worth for a personal daily tool. `--no-notify` still re-renders the brief HTML and re-writes the receipt (status stays `sent`), so the underlying file is correct whenever you next look — it just doesn't push a second alert or reopen a tab. You find out the drafts are ready by running `/morning` when you sit down, same as any other day with nothing pre-drafted.
+**This phase runs after delivery, on purpose.** Drafting six items with independent verification takes far longer than sensing and planning, and the brief must not wait behind it: you would be reading yesterday's arrival time for the same information. So the brief goes out on schedule with the 🤖 section marked `drafting…`, and when the drafts land this phase **updates the same brief in place and re-runs the notifier with the same `{DATE}`**, which reuses the same `#id` rather than burning a new one. Second notification, one line: `🤖 {n} drafts ready ({ready} READY). /morning to ship.`.
 
 Two consequences worth stating plainly. **A watchdog kill mid-pre-draft costs nothing that was not already delivered**, because the plan and the verified findings left the building before drafting started. And **`dispatch.max_predrafts` is the cost ceiling**: it is what stops a bad morning from becoming an expensive one, so lower it before you conclude the loop is too costly to run.
 
@@ -439,15 +611,32 @@ Two consequences worth stating plainly. **A watchdog kill mid-pre-draft costs no
 
 ### 3a. The gate: ship, edit, or discard
 
-**When the prep pre-drafted (the normal case), the gate is not "shall I start?" any more.** The work is done and graded. Print the drafts with their labels and their would-be external action, then ask, in one message:
+**When the prep pre-drafted (the normal case), the gate is not "shall I start?" any more.** The work is done and graded. **Open the review packet first** (`trust.py --date {DATE} packet` to rebuild it, then read it): it holds every draft, its computed verdict, its ship action and its full text in one file, plus the decisions and your-turn items from the plan. Then print the drafts with their labels and their would-be external action, and ask, in one message:
 
 > Here's what I drafted this morning. {n} READY, {m} need your edit.
 > **[a] ship all READY · [s] select · [e] edit one with me · [n] none, just the decisions**
 > (Each ship is confirmed individually against its target before it happens. Nothing has left the workspace yet.)
 
-**Freshness before shipping, not before drafting.** A draft written at 07:52 and shipped at 11:00 rests on a four-hour-old read. Before any ship, re-verify the volatile claims **inside that draft** (ticket statuses, experiment state, counts) against live sources, and say what changed. If a claim moved, the draft goes back for one targeted revision rather than shipping with a number that was true at breakfast. Re-pull new transcripts and the board state too, since a new item may have appeared since the prep and belongs in today's plan.
+**Freshness before shipping, not before drafting.** A draft written at 07:52 and shipped at 11:00 rests on a four-hour-old read. Before any ship, re-verify the volatile claims **inside that draft** (ticket statuses, experiment state, counts) against live sources, and say what changed. **A claim that moved is a correction, so register it** (`trust.py correct add --was ... --now ... --source ...`), which holds every draft in the session that rests on the same fact, not only the one you happened to be reading. Then the draft goes back for one targeted revision rather than shipping with a number that was true at breakfast, and it is re-stamped afterwards so the freshness re-check lands in `requeried`. Re-pull new transcripts and the board state too, since a new item may have appeared since the prep and belongs in today's plan.
 
 **When there are no pre-drafts** (pre-drafting disabled, the watchdog fired, or new SOLVE items appeared since the prep), fall back to the original gate: show the four buckets and ask which 🤖 items to draft now, then run 3b. Say plainly which situation you are in. A gate that silently offers a smaller menu than usual reads as "quiet morning" when it actually means "the prep did not finish".
+
+**Meeting actions have their own gate, and it is a file, not a question.** If an action queue exists for today, say so and point at it rather than reading the items out:
+
+```
+python3 05-automation/agent-manager/scripts/tickets.py --date {DATE} status
+```
+
+> `{n} actions from {meetings}: {t} tickets, {d} decisions, {u} updates. Tick what you want done in {queue path}, then I act on only those.`
+
+He ticks `[x]` to build and `[-]` to drop, saves, and then:
+
+```
+python3 05-automation/agent-manager/scripts/tickets.py --date {DATE} sync
+python3 05-automation/agent-manager/scripts/tickets.py --date {DATE} approved --json
+```
+
+`sync` reads the boxes back into state and **refuses a ticked box on a blocked item**, naming the rule. Approval is not action: each approved item is still confirmed individually at the ship gate below, because creating a Jira issue, editing Confluence and posting to a channel are all `never_auto` and stay that way.
 
 Wait for the answer either way. This is the permission gate, and nothing external happens before it.
 
@@ -455,7 +644,7 @@ Wait for the answer either way. This is the permission gate, and nothing externa
 Each 🤖 item runs as a short **pipeline, not a single shot**, whether Phase 2p ran it unattended at 07:52 or you asked for it at the gate. One definition, two callers. This draft → verify → revise loop is the rung-three step: the agent checks its own output so it reaches you good enough to ship, not something you send back.
 
 1. **Draft.** A sub-agent runs the named `skill` with today's sensed context and writes its output to `paths.review_dir` as `{job-id}.md`.
-2. **Verify (independent skeptic, per-check).** A *separate* agent — never the one that drafted it — resolves the job's rubric: `{paths.rubrics_dir}/{skill}.rubric.yml` extended by `_base.rubric.yml`, falling back to `_base` alone if no skill rubric exists. It grades the draft **check by check**, not with a vibe score — for each check it applies the grader contract *"Apply this single check to the artifact. Return pass | fail | n/a and one sentence why"* and defaults to `fail` when uncertain. Returns `{per_check: [{id, result, reason}], failed: [...], ready: bool}` where `ready` = **every applicable check passes**. Any `block`-severity fail (invented facts, ungrounded targets) = hard NEEDS-EDIT regardless of the rest. (See `rubrics/README.md` for the full grading contract.)
+2. **Verify (independent skeptic, per-check).** A *separate* agent — never the one that drafted it — resolves the job's rubric: `{paths.rubrics_dir}/{skill}.rubric.yml` extended by `_base.rubric.yml`, falling back to `_base` alone if no skill rubric exists. It grades the draft **check by check**, not with a vibe score, and it reads the rubric's `calibration_target` and `_base`'s `tolerances` first. **The target names the reader to grade against, and it is never Tomek's voice. If the reason you are about to fail a judgement check appears in `tolerances`, the verdict is `pass`.** Failing a draft for phrasing, ordering, formatting or for being shorter than expected is the specific error this exists to stop — for each check it applies the grader contract *"Apply this single check to the artifact. Return pass | fail | n/a and one sentence why"* and defaults to `fail` when uncertain. Returns `{per_check: [{id, result, reason}], failed: [...], ready: bool}` where `ready` = **every applicable check passes**. Any `block`-severity fail (invented facts, ungrounded targets) = hard NEEDS-EDIT regardless of the rest. (See `rubrics/README.md` for the full grading contract.)
 3. **Revise (at most `quality.max_revisions`).** If any check failed, hand the draft back to the skill with the **failed checks' statements + the verifier's one-line reasons** — the specific fixes, not "make it better" — then re-verify. Stop after `max_revisions`; never loop indefinitely.
 4. **Adjudicate disagreements with a third agent (`quality.disagreement_judge`).** When two verifiers run and they disagree on any check, **spawn a judge**. The judge sees the artifact, the disputed checks only, and both verdicts with their one-line reasons. It does not see which verifier said what, and it decides **per disputed check** with a reason. Its verdict is final.
 
@@ -495,9 +684,57 @@ Lead the queue with READY items (least of your attention); for NEEDS-EDIT items 
 
 For each draft the user approves to ship, **then** perform the external action (create the Jira tickets, publish the Confluence page, etc.) — one at a time, confirming the target before each. This is the only place `never_auto` actions happen, and only with a fresh yes.
 
+**Every send is recorded the moment it lands, before you move to the next item:**
+
+```
+python3 05-automation/agent-manager/scripts/shipped.py add \
+  --job {job} --to "{the real page id / ticket key / channel}" --by loop
+```
+
+The `verified` column is read from the stamp, not typed, so a draft that went out ungraded says so in the ledger permanently. That is the point: a ledger that cannot embarrass the loop is decoration. **Tomek shipping something by hand runs the same command with `--by hand`, and that is the path that matters** — loop-initiated sends were always countable, his were invisible. `/shipped` is the shorthand.
+
+If a ship is refused mid-queue, record nothing. The ledger holds what left, never what was intended.
+
+**For each approved item, do the thing, then record where it landed:**
+
+```
+python3 .../tickets.py --date {DATE} done --id {t1} --key KM-14501
+python3 .../tickets.py --date {DATE} done --id {t2} --to "confluence 6000804064"
+python3 .../tickets.py --date {DATE} done --id {t3} --to "mattermost KM Growth"
+```
+
+That marks the queue, appends to the outbound ledger, **and writes the provenance row** in one step, so every meeting action is a send like any other and carries its own origin. The provenance row leaves an `outcome` slot empty on purpose: the outbound ledger proves a thing left, and the outcome is the half that makes the loop learnable. **Never record a destination the call did not actually return.** A decision goes to the current sprint Decision Log page, which is Maria's: append an entry, never restructure her page.
+
+**Sweep for outcomes once a week, on the same day as the coaching deep pass.** This is the other half of the circle and nothing else fills it:
+
+```
+python3 05-automation/agent-manager/scripts/tickets.py pending-outcomes --older-than 7
+```
+
+For each item it names, go and read the real source, then record it:
+
+```
+python3 .../tickets.py outcome --uid 2026-09-16/i1 \
+  --result "became experiment 10460112, +3.1% toggle use, not significant" \
+  --source "Amplitude experiment object 10460112"
+```
+
+**`--source` is mandatory and the command refuses without it.** An outcome with no named source is the loop marking its own homework. A ticket's outcome is its Jira resolution, a decision's is whether a later decision superseded or reversed it, an idea's is what the experiment it became actually returned.
+
+The question this makes answerable is worth more than the chain itself: **which meetings produce decisions that survive.** If Season Planning decisions get reversed within a sprint and Design and Refine decisions do not, that is a measurable fact about how the squad decides, and nothing else in this workspace can see it.
+
+**Close the coaching and challenge loops here too, when he answers them.** An unanswered nudge is not a neutral result, it is the coaching equivalent of a carried item:
+
+```
+python3 05-automation/agent-manager/scripts/coach.py   respond --id {n7} --outcome acted|declined|deferred
+python3 05-automation/agent-manager/scripts/sharpen.py respond --id {s3} --outcome engaged|declined|deferred
+```
+
+Record `declined` honestly. Declining twice parks that thread or topic for a month, and that is the mechanism that keeps daily coaching from becoming daily nagging. Softening a decline into a deferral disables it.
+
 ### 3d. Close the loop
 Append to `paths.run_log`, honestly:
-`{DATE} run: pre-drafted {p} unattended ({ready}/{p} READY first-pass; {r} auto-revised; {e}/{x} cleared the stricter external double-verify), drafted {n} more at the gate, shipped {s} ({which external actions}), decisions surfaced {m}. Claims killed by the finding gate: {n} ({claim: why}). Carried items converted: {closed}/{escalated}/{parked}, still carrying: {list with counts}. Config self-repairs: {key: old -> new}. Failed checks this run: {check-id×count}. Truly-autonomous this run: {jobs that ran scheduled + drafted unattended + passed every check + shipped without rewrite}.`
+`{DATE} run: pre-drafted {p} unattended ({ready}/{p} READY first-pass, computed by trust.py from {v} recorded verifier ids; {u} UNSTAMPED; {r} auto-revised; {e}/{x} cleared the stricter external double-verify), corrections registered {c} ({applied}/{dismissed}/{still open}), drafted {n} more at the gate, shipped {s} ({which external actions}; {sv} verified-at-send per the outbound ledger), decisions surfaced {m}, tickets {td} drafted / {ta} approved / {tc} created, coaching `{thread}` ({zoom}) {outcome or "no outcome yet"}, challenge {s or "none, no decision signal"}. Claims killed by the finding gate: {n} ({claim: why}). Carried items converted: {closed}/{escalated}/{parked}, still carrying: {list with counts}. Config self-repairs: {key: old -> new}. Failed checks this run: {check-id×count}. Truly-autonomous this run: {jobs that ran scheduled + drafted unattended + passed every check + shipped without rewrite}.`
 
 Track four things across runs, because each one points at a different repair:
 
@@ -507,6 +744,7 @@ Track four things across runs, because each one points at a different repair:
 | **failed-check histogram** | one specific check fails most on one skill | `focused-skill-improvements.md`, which now knows *which check* |
 | **claims killed at the finding gate** | the sense probes are producing claims they cannot ground | the probe's contract, usually a missing evidence excerpt |
 | **pre-drafted but never shipped** | the loop is drafting work you do not want | the routing rules, not the drafters. This is the number that would have caught seven dead runs on day two instead of day fourteen |
+| **shipped without an independent verifier** (`shipped.py list --unverified`) | the trust layer is running as paperwork, not as a gate | either the verifiers are not actually running, or the drafts are good and the bar is theatre. The ledger tells you which, because it holds both halves |
 
 The first two are about output quality, the last two about whether the loop is aimed at the right work. Keep them distinct; they have never had the same cause.
 
@@ -526,4 +764,5 @@ Top of your list: {the single most important your-turn / decision item}.
 - **v1 scope** = daily spine + meeting prep/debrief + GC/sprint package. `#22 ideation` and `#23 eval sheets` are deliberately out (no skill yet) — see the commented block in the config.
 - **Failure handling.** A sub-agent that errors drops its item to the decision bucket with the error, never silently. A missing MCP downgrades that signal, it does not abort the run. A failed probe is one missing section, not a failed run: the fan-in tolerates gaps by design and names them in the preflight line.
 - **What v3 changed, and the evidence behind each.** SENSE fans out because a single long context was dropping the last items on its list. Findings are verified because four runs matched a label instead of a row and one of them retracted a correct finding. Carried items converge on a numbered ladder because a config fix reached its sixth ask. The prep pre-drafts because seven consecutive runs planned the right work and dispatched none of it. The loop repairs its own config because the permission to do so was always there and was never used. Each of these is a topology change, not a prompt change, which is why "be more careful next time" would not have fixed any of them.
+- **The trust layer is code, not prose, and that is the whole point.** Grading, correction propagation, the provenance header and the outbound record live in `scripts/trust.py` and `scripts/shipped.py`, with `trust.py selftest` proving the verdict rules on every change. Everything this command had specified about independent verifiers was already correct and had twice rendered as if it were running when it was not. A rule an agent can narrate its way around is not a rule; a verdict computed from recorded ids is. See `05-automation/agent-manager/TRUST-LAYER.md`.
 - **Watch these two numbers before anything else.** *Pre-drafted but never shipped* tells you the loop is aimed at the wrong work; the fix is in the routing rules. *Claims killed at the finding gate* tells you the probes are asserting things they cannot ground; the fix is in the probe contract. Both are new in v3 and both are early warnings the old run log could not produce.
