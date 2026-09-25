@@ -99,18 +99,6 @@ The permission contract is unchanged: `unattended_allowed` still covers only rea
 
 ## Open decision for the squad (Tomek)
 
-**RESOLVED 2026-08-21: the package home is `gitlab.thenetcircle.lab/tomzduda/morning-loop`**, its own internally-shared repo. It is deliberately NOT the PO workspace repo, because GitLab access is repo-level and that repo contains a squad member's performance review. The paragraph below is kept for the reasoning that led here.
+**RESOLVED 2026-08-21, and MOVED 2026-09-25: the package home is now `ideawise.ghe.com/tomzduda/morning-loop`**, migrated from the lab GitLab to GitHub Enterprise with full history and every branch when GHE became the Kaufmich standard. The GitLab repo is a frozen archive: do not push to it. Its own internally-shared repo. It is deliberately NOT the PO workspace repo, because GitLab access is repo-level and that repo contains a squad member's performance review. The paragraph below is kept for the reasoning that led here.
 
 The cloud-reachable home for the package was the fork in the road. Options: mirror `morning-loop-share` to a cloud-reachable git; or keep Lab-GitLab as source of truth and publish a read-only cloud mirror the routines pull. Either way, until this is decided, "unattended" means "a hand-synced copy runs in the cloud," and that is worth stating plainly rather than implying full automation.
-
----
-
-## Windows (Task Scheduler): substrate B on Windows
-
-Same contract as the launchd runner, same ceiling (Assisted infrastructure: fires only while the machine is on; `routine_health` is mandatory).
-
-- **Runner:** `scripts/run-prep.template.ps1`, copied to `scripts/run-prep.ps1` with the FILL lines set. Same shape as the zsh runner: read-only `--prep`, 25-minute timeout, delivery safety net, receipts. Adds a lock file (a scheduled and a manual run for the same day cannot race) and a plan-file-exists guard (re-triggers are no-ops).
-- **Schedule:** `scripts/register-prep-task.template.ps1`, copied, filled, run once. Registers `MorningLoop-Prep` with AtLogOn + SessionUnlock + weekday 08:00 fallback. Presence-based triggers are deliberate: a fixed clock delivers to an empty desk.
-- **Notify:** a one-line WinForms toast (no install) plus whatever channel `~/.config/morning-loop/notify.env` selects; the runner reads that file the same way the zsh runner sources it. `macos` falls back to `file`.
-- **Health:** the runner's exit code is derived from the deliverable, not from the process: 0 delivered, 2 concurrent run skipped, 3 no plan file, 4 plan but no delivery, 10 VPN never up, 124 timeout. `Get-ScheduledTaskInfo MorningLoop-Prep | Select-Object LastTaskResult` is the check.
-- **Do one supervised run before scheduling.** Same rule as launchd; the same class of failures (expired login, network not up, watchdog firing with nothing verified) shows up in seconds when you watch it.

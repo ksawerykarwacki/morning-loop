@@ -1,3 +1,12 @@
+> **This repo moved to GitHub Enterprise on 2026-09-25.**
+> Home: `https://ideawise.ghe.com/tomzduda/morning-loop` . The lab GitLab copy
+> (`gitlab.thenetcircle.lab/tomzduda/morning-loop`) is a frozen archive and must not be pushed to.
+> If you cloned before that date:
+>
+> ```bash
+> git remote set-url origin https://ideawise.ghe.com/tomzduda/morning-loop.git
+> ```
+
 # The Morning Loop — a shareable agent-manager for your day
 
 > **You are reading this in the standalone package repo.** Paths in these docs that begin
