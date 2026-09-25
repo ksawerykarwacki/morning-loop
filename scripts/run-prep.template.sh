@@ -93,6 +93,8 @@ elif [ ! -f "$PLAN" ]; then
   # because "it didn't run" is useless and "your login expired" is actionable.
   if grep -qi "Failed to authenticate\|OAuth session expired\|Invalid API key\|Please run.*login" "$LOG"; then
     alert_on_miss "Claude login expired" "Run: claude /login in the terminal, then /morning to get today's brief."
+  elif grep -qi "mcp.*timeout\|mcp.*timed out\|sse.*closed\|sse.*disconnected\|sse.*timeout\|event stream.*closed\|event stream.*ended\|econnreset\|connection reset by peer" "$LOG"; then
+    alert_on_miss "An MCP server dropped mid-run (SSE/stream timeout)" "A tool server's stream died, so the run could not finish. Re-run /morning manually; if it recurs, reconnect that MCP server."
   elif [ $STATUS -ne 0 ]; then
     alert_on_miss "The prep run failed (exit $STATUS)" "No brief today. Check launchd.log, then run /morning manually."
   else

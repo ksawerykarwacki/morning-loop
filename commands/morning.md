@@ -29,9 +29,16 @@ It is the build behind Quick Win #1 in `jtbd-tomek-2026-06-19.md` — the single
 
 ## Mode select
 
-Check `$ARGUMENTS`:
-- **`--prep`** → run **Phase 0 → 1 → 2 → 2v → 2b → 2c → 2p**: preflight, fan-out sense, plan, verify the findings, **deliver the brief on time**, notify, health-check, then pre-draft the SOLVE work and update the same brief in place when the drafts land. This is what the scheduled pre-run invokes on weekday mornings. No shipping, no questions (no human is present).
-- **empty** (Tomek runs it when he sits down) → if today's plan file exists, **load it, load the pre-drafts, and skip to Phase 3**; otherwise run Phases 0 to 2c inline, then Phase 3. If the prep already delivered today's brief, do not re-send it, say so and move to the gate.
+**Decide the mode mechanically, with a shell probe, before anything else — never by eyeballing `$ARGUMENTS`.** Instruction-level matching has failed twice on OpenCode (2026-08-20, 08-24): the argument arrives as `--prep\n` via `opencode run --command morning -- --prep`, and the trailing newline made it read as empty, so the scheduled prep silently ran the interactive path with no human present. Run this exact check first — it trims the argument and honours the out-of-band `MORNING_MODE` env the runner sets as a belt-and-braces override:
+
+```bash
+ARG="$(printf '%s' '$ARGUMENTS' | tr -d '[:space:]')"; if [ "$ARG" = "--prep" ] || [ "${MORNING_MODE:-}" = "prep" ]; then echo "MODE=prep"; else echo "MODE=interactive"; fi
+```
+
+The printed `MODE=` line is binding — obey it and never re-decide from the raw string. Trimming is harmless where the argument is already clean (Claude) and load-bearing where it is not (OpenCode).
+
+- **MODE=prep** → run **Phase 0 → 1 → 2 → 2v → 2b → 2c → 2p**: preflight, fan-out sense, plan, verify the findings, **deliver the brief on time**, notify, health-check, then pre-draft the SOLVE work and update the same brief in place when the drafts land. This is what the scheduled pre-run invokes on weekday mornings. No shipping, no questions (no human is present).
+- **MODE=interactive** (Tomek runs it when he sits down) → if today's plan file exists, **load it, load the pre-drafts, and skip to Phase 3**; otherwise run Phases 0 to 2c inline, then Phase 3. If the prep already delivered today's brief, do not re-send it, say so and move to the gate.
 
 **Phase order matters and it is deliberate.** The brief is delivered *before* pre-drafting starts, so a run that dies mid-draft has still delivered everything it had, and the brief never waits behind the slowest thing in the run. Never reorder these to draft first.
 

@@ -107,6 +107,8 @@ elif [ ! -f "$PLAN" ]; then
     alert_on_miss "OpenCode auth expired" "Run: opencode auth login, then /morning for today's brief."
   elif grep -qi "command not found:\|unknown command\|invalid choice\|unknown option" "$LOG"; then
     alert_on_miss "Runner invocation is wrong" "opencode rejected the command. Flip MORNING_INVOKE_MODE (command|message) in run-prep and retest."
+  elif grep -qi "mcp.*timeout\|mcp.*timed out\|sse.*closed\|sse.*disconnected\|sse.*timeout\|event stream.*closed\|event stream.*ended\|econnreset\|connection reset by peer" "$LOG"; then
+    alert_on_miss "An MCP server dropped mid-run (SSE/stream timeout)" "A tool server's stream died, so the run could not finish. Re-run /morning manually; if it recurs, reconnect that MCP server."
   elif [ $STATUS -ne 0 ]; then
     alert_on_miss "The prep run failed (exit $STATUS)" "No brief today. Check briefs/launchd.log, then run /morning manually."
   else
