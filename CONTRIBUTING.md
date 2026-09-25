@@ -145,3 +145,25 @@ Different path, lower bar. If you fixed something in the runner, the notifier or
 4. **Its first adoption row gets written by someone else**, which is the moment it counts.
 
 If step 4 never happens, that is worth knowing too. A skill nobody else adopts is a personal script, and the honest thing is to label it one.
+
+---
+
+## How to contribute, as of 2026-09-25
+
+**Where the repo lives.** `https://ideawise.ghe.com/tomzduda/morning-loop`. It moved from the lab GitLab on 2026-09-25 when GitHub Enterprise became the Kaufmich standard. If you cloned before that date, the old remote will not fail loudly, it will simply never show you another commit:
+
+```bash
+git remote set-url origin https://ideawise.ghe.com/tomzduda/morning-loop.git
+```
+
+**You have write access.** Andres, David, Daniel Zhu, Xitong and Mathieu were added directly, no invitation to accept.
+
+**`main` is protected and takes pull requests only.** Push your branch, open a PR, and it needs one approval before it merges. Force pushes and branch deletion are off, and an open review conversation blocks the merge. This is not ceremony: Tomek's ruling of 2026-09-24 is that nothing ships without a human looking first, and that applies to the package as much as to the drafts it produces.
+
+**Branch naming.** Anything is fine. `xitong/opencode-failure-classes` and `david-clean-clone-fixes` both worked. What matters is the commit message: say what was broken, how you know, and what you verified. The four branches merged so far all did, and it is why they could be reviewed quickly.
+
+**Rebase before you open the PR.** All merges so far have been fast-forwards and the history is linear. Keeping it that way makes `git log` readable as a sequence of fixes rather than a braid.
+
+**Say what you verified, not that it works.** Xitong's merged commit is the model: *"Verified: `zsh -n` on both runners, classifier regex matches a real SSE disconnect line and not a clean log, `doctor.py` exit 0."* That sentence is what let it merge the same morning it arrived.
+
+**One person still cannot reach this repo.** Maria has no GitHub Enterprise account in either org, and she authored the Windows runner that is now in `main`. That is an IT request, not something the repo can fix.
