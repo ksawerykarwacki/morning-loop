@@ -203,6 +203,22 @@ health:
     grace_minutes: 15               # delivered by the runner within this of the fire = unattended
     window_weekdays: 10             # the rolling denominator the health line reports
 
+# ---------------------------------------------------------------------------
+# ASKS (from the plan-drafting adoption, PLAN-DRAFTING-ADOPTION.md item 1).
+# The loop's questions for you, answered by typing under **Answer:** in a file,
+# with no command to run. Zero questions still writes the file, because absence
+# and zero must not look identical.
+# ---------------------------------------------------------------------------
+asks:
+  enabled: true
+  script: "05-automation/agent-manager/scripts/asks.py"
+  file: "01-sprint-operations/current/agent-drafts/{DATE}/questions-{DATE}.md"
+  answer_in_file: true              # no command to answer; a parser reads the Answer block
+  always_write: true                # zero questions still writes the file: absence != zero
+  require_why_it_matters: true      # name what changes, or it is not a blocker
+  options_only_when_material: true  # one defensible answer -> a confirmation, not a menu
+  no_single_option_menus: true
+  answered_becomes_provenance: true # an answer is drafted as kind:question, derived_from the ask
 
 # ---------------------------------------------------------------------------
 # Dispatch: does the unattended prep DRAFT the day's SOLVE items, or only plan?

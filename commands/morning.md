@@ -235,6 +235,7 @@ For each firing rule, build a **plan item**: `{job, skill, bucket, external_acti
 # Morning Plan — {DATE} ({weekday}, sprint {n}/{len}, {phase})
 
 **Sprint goal:** {the goal, verbatim from the sprint} → {on track / at risk, and the one reason}
+**Confidence:** {the census line, verbatim from `trust.py claims census`}. Markers: [V] verified live, [R] reported, [I] inferred, [C] carried.
 
 ## 🤖 SOLVE — agent does these on your approval ({n})
 - [ ] {job} · via `{skill}` · {goal-critical|goal-adjacent|loose end} · fires because {why} · ships to: {external_action or "local"}
@@ -287,6 +288,34 @@ Dispatch verifiers in parallel, one per claim, on `quality.verifier_model`. A ve
 **Two independent verifiers, both of which must clear it, for any claim that contradicts a previous run or contradicts a leadership-facing page.** Those are the two shapes with the worst track record: a retraction is the one claim type that damages trust in every prior brief at once, and a contradiction of Maria's or the squad's published page is the one most likely to be repeated out loud in a meeting. Scale rigour to the blast radius, the same way `quality.stricter_for_external` already does for drafts.
 
 A **KILLED** claim never reaches the brief. It is logged in the run log as `killed: {claim} ({why})`, because a claim the loop generated and then rejected is real evidence about the loop and is exactly what the offline skill-improvement pass needs.
+
+### Record every claim that reaches the brief, so its marker is computed (V3-TO-V4 D6, D7)
+
+The drafts have carried a provenance header since v3. The brief carries roughly 40 claims and got one verdict, and on the first v3 run the gate was pointed at 3 of about 40. Uniform presentation invites uniform trust. So **every claim that survives the gate and reaches the brief is recorded**, and trust.py, not you, decides its marker:
+
+```
+# Write to /tmp/claims-{DATE}.json, then pass the path. No heredocs in the prep sandbox.
+python3 05-automation/agent-manager/scripts/trust.py --date {DATE} claims record --in /tmp/claims-{DATE}.json
+# the file's contents, one entry per claim in the brief (killed ones too, with "killed": true):
+[{"id": "{short slug}", "text": "{the claim as it reads in the brief}",
+  "probe_agent": "{agent id of the probe that produced it}",
+  "source": "{JQL / chart id / page id}", "read_at": "{YYYY-MM-DDTHH:MM, from the probe}",
+  "verifiers": [{"agent_id": "{the verifier's agent id}", "requeried": "{what it re-ran}",
+                 "at": "{YYYY-MM-DDTHH:MM}", "result": "pass"}],
+  "derived_from": ["{claim ids, only when it has no direct source}"],
+  "carried_from": "{brief #id, only when it comes forward from an earlier brief unchecked}"}]
+```
+
+It prints the **census line** and one **tag** per claim. The four markers, and the rule behind each:
+
+| tag | marker | computed when |
+|---|---|---|
+| `[V hh:mm]` | verified | a verifier whose agent id is not the probe's own re-queried the source this run, and the time is recorded |
+| `[R]` | reported | one source, read this run, not re-queried |
+| `[I]` | inferred | derived from other claims, no direct source |
+| `[C]` | carried | from an earlier brief, or read on an earlier day, and not re-checked today |
+
+A claim with none of these comes back `[?]` and the census says `UNSOURCED`; fix it or drop it, never ship it tagged. **Only copy the tags trust.py printed.** An agent id you did not get back from a real dispatch is a fabricated verifier, which is the 2026-08-26 failure in a new place. Re-run `claims census` after any late correction, because the census line counts corrections too.
 
 ### Corrections propagate to the drafts, or nothing ships
 
@@ -405,10 +434,16 @@ python3 05-automation/agent-manager/scripts/notify.py \
 ```
 ☀️ MORNING BRIEF — {DATE}   ({weekday}, sprint {n}/{len}, {phase})
 Window: {lookback} · Sources: {preflight line, degradations named}
+Confidence: {census line from trust.py claims census, verbatim, e.g. "41 claims: 12 verified
+ live, 22 reported, 3 inferred, 4 carried. 2 corrections registered, both cleared."}
 
 ── STATE OF YOUR WORLD ──   (read this first)
 {3-6 lines of synthesis, not a list: what actually moved, who is waiting on you,
- the one live decision. This is the part worth reading if you read nothing else.}
+ the one live decision. This is the part worth reading if you read nothing else.
+ EVERY factual claim in this section and below ends with its tag from trust.py:
+ [V 08:14] verified live · [R] reported · [I] inferred · [C] carried. Tag the claim,
+ not the line: a sentence with two claims carries two tags. Instructions, draft
+ paths and questions are not claims and carry none.}
 
 ── TOP OF YOUR LIST ──
 {the single most important item, with the why}
@@ -430,8 +465,17 @@ Window: {lookback} · Sources: {preflight line, degradations named}
   - Commitments: {n carried}        - Meetings captured: {n written to notes}
 
 ── OPEN QUESTIONS ──   ({n} asked, {a} answered since last run, {o} open)
+{EVERY open question printed in full, here, in the brief (Tomek, 2026-09-28: "I don't
+ want to have to go to other files"). Per question: the question, why it matters, the
+ options or the default answer, carry count. Never a count plus a pointer.}
 Answer in {questions file path}. No command, type under **Answer:** and save.
-{the one that has carried longest, with its count}
+
+── INBOX ──   ({k} read yourself, {d} draft-worthy, {f} FYI, {p} noise)
+{EVERY triaged item printed here, in the brief (Tomek, 2026-09-28). READ THIS YOURSELF,
+ DRAFT-WORTHY and FYI items each get one line of WHAT / WHY / HOW; noise is grouped with
+ a count. "Folded into this brief" means the items are HERE, not just their counts. If
+ the inbox probe did not run or is not enabled, say so on this line instead of
+ omitting the section.}
 
 ── COACHING ──   (one, today only. A different thread tomorrow.
                  ALWAYS rendered: "nothing due, and why" is information, absence is not.)
@@ -452,6 +496,8 @@ Today: {one thing, doable before lunch}
 Packet: {paths.review_packet}   (every draft, its verdict, its ship action, in one file)
 Grading: {n} stamped · {counts by verdict} · {n} UNSTAMPED · {n} open corrections
 Every verdict above is computed by trust.py from recorded agent ids. No agent wrote one.
+The same holds for the claim tags: [V] needs a recorded, independent verifier id and a
+re-query time, and a tag nobody recorded is not a tag.
 Out under your name since the last run: {shipped.py list --since; or "nothing recorded"}.
 
 ── HONESTY LINE ──
@@ -480,10 +526,16 @@ Other channels behave the same way: `confluence_page` updates one rolling page i
 4. The previous scheduled run happened at all. If yesterday was a working day with no run-log line, **that is a silent miss**, so report it today with the gap length.
 5. **Planned versus produced.** Count the SOLVE items in the plan against the files in `paths.review_dir`, and the files against those carrying a verify stamp. Report all three (`6 planned · 5 written · 0 verified`). Run #30 lost a planned item silently and nobody knew until the files were counted by hand.
 6. **Yesterday's pre-drafts: how many were shipped?** A run of days where drafts are produced and never shipped is the same class of silent failure as a brief that never arrived, and it is the one this loop actually had. Report the streak (`0 shipped of 11 drafted across 4 days`) rather than waiting for someone to notice.
+7. **On time, not just delivered (V3-TO-V4 D3).** Delivery success said 20 of 27 weekdays; lag against the fire said 1 of 21. Same artefacts, and only the second number redirects the work. Run:
+   ```
+   python3 05-automation/agent-manager/scripts/ontime.py record --date {DATE}
+   python3 05-automation/agent-manager/scripts/ontime.py report
+   ```
+   `record` classifies today against `schedule.time` and `health.on_time.grace_minutes`: **unattended** (delivered by the unattended runner within the grace window), **late** (after it, or only because someone ran it by hand), or **missed**. It writes the result into today's receipt and one run-log line. `report` prints the rolling rate with its denominator, e.g. `unattended 3 of 10 weekdays, late 6, missed 1 · median lag 52 min`. Copy the report line into the health line verbatim. Never estimate a lag for a day it reports as `no record`; those have no receipt and no runner attempt, and they stay out of the denominator. The runner (your copy of `scripts/run-prep.template.sh`) also calls `record` at the end of every run, so a day the model never reached still gets its line.
 
 Check both halves independently. The known trap is a two-stage routine where the first half succeeds, so an "did something run?" check reports healthy while the real deliverable never landed. On any miss, write a diagnosis (what was missing, the probable cause, the one fix) and alert on `health.alert_on_miss`.
 
-In `--prep` mode: continue to **Phase 2p**, then stop. Append one line to `paths.run_log`: `{DATE} prep: planned {n} SOLVE / {m} ASK / {k} HUMAN · delivered: {channel} {✅/❌ + reason} · pre-drafted {p} ({ready} READY, {skipped} skipped: {why}) · claims killed: {n} · config self-repairs: {list or none} · health: {pass/miss detail}`.
+In `--prep` mode: continue to **Phase 2p**, then stop. Append one line to `paths.run_log`: `{DATE} prep: planned {n} SOLVE / {m} ASK / {k} HUMAN · delivered: {channel} {✅/❌ + reason} · pre-drafted {p} ({ready} READY, {skipped} skipped: {why}) · claims killed: {n} · census: {the census line} · config self-repairs: {list or none} · health: {pass/miss detail} · {the ontime.py report line}`.
 
 ---
 
