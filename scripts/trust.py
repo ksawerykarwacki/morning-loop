@@ -39,6 +39,9 @@ Commands
                                            every draft, its verdict and its ship action)
   trust.py status  --date D                one line for the brief
   trust.py preflight --routed a,b ...      refuse to draft external work with no verifiers
+  trust.py claims record --in f            record the brief's claims, print the
+                                           confidence census and each claim's marker
+  trust.py claims census|tags              recompute them from what was recorded
   trust.py selftest                        prove the verdict rules, no I/O
 
 Exit codes: 0 fine · 1 something is not shippable · 2 usage/setup error.
@@ -995,6 +998,154 @@ def cmd_preflight(ctx: Ctx, a) -> int:
 
 
 # ---------------------------------------------------------------------------
+# claims: the brief's confidence census and inline markers (V3-TO-V4 D6, D7)
+# ---------------------------------------------------------------------------
+#
+# The provenance header answers "which parts do I need to read closely" per
+# DRAFT. The brief carries roughly 40 claims and got one verdict, and on the
+# first v3 run the gate was pointed at 3 of about 40. Uniform presentation
+# invites uniform trust. So every claim in the brief carries one of four
+# markers, and the brief opens with the count of each.
+#
+# The marker is COMPUTED from what was recorded, the same rule as a draft
+# verdict: `verified` needs a verifier agent id that is not the probe's own,
+# plus the source it re-queried and when. Nothing here takes the loop's word.
+#
+#   verified  [V hh:mm]  re-queried live by an independent verifier this run
+#   reported  [R]        one source, read this run, not re-queried
+#   inferred  [I]        derived from other claims, no direct source
+#   carried   [C]        from an earlier brief or an earlier day's read, not
+#                        re-checked today
+#   unsourced [?]        none of the above. Should be zero; shown when it is not
+#
+# Stored as {review_dir}/.trust/claims.json. It has no `job` key, so stamps()
+# never mistakes it for a draft stamp.
+
+MARKERS = ("verified", "reported", "inferred", "carried", "unsourced")
+
+
+def _hm(stamp: str) -> str:
+    m = re.search(r"(\d{1,2}:\d{2})", str(stamp or ""))
+    return m.group(1) if m else ""
+
+
+def _day(stamp: str) -> str:
+    m = re.match(r"^(\d{4}-\d{2}-\d{2})", str(stamp or ""))
+    return m.group(1) if m else ""
+
+
+def claim_marker(c: dict, run_date: str) -> tuple[str, str, str]:
+    """(marker, inline tag, why). Precedence: verified, carried, reported,
+    inferred, unsourced. A carried claim that was re-queried today IS verified;
+    re-checking is exactly what un-carries it."""
+    probe = str(c.get("probe_agent") or "").strip()
+    for v in c.get("verifiers") or []:
+        vid = str((v or {}).get("agent_id") or "").strip()
+        if not vid or (probe and vid == probe):
+            continue
+        if str(v.get("result") or "pass").lower() == "fail":
+            continue
+        req, at = str(v.get("requeried") or "").strip(), str(v.get("at") or "").strip()
+        if req and at and _day(at) in ("", run_date):
+            return "verified", f"[V {_hm(at)}]".replace(" ]", "]"), f"{vid} re-queried {req}"
+    read_day = _day(c.get("read_at"))
+    if c.get("carried_from") or (read_day and read_day < run_date):
+        src = c.get("carried_from") or f"read {read_day}"
+        return "carried", "[C]", f"from {src}, not re-checked today"
+    if str(c.get("source") or "").strip() and str(c.get("read_at") or "").strip():
+        return "reported", "[R]", f"one source: {c['source']}"
+    if c.get("derived_from"):
+        return "inferred", "[I]", "derived from " + ", ".join(map(str, c["derived_from"]))
+    return "unsourced", "[?]", "no source, no derivation, no verifier recorded"
+
+
+def correction_summary(corrections: list[dict]) -> tuple[int, int]:
+    """(registered, cleared). Cleared means every draft it touched applied or
+    dismissed it; a correction that touched no draft is cleared by definition."""
+    cleared = sum(1 for c in corrections
+                  if all(st in ("applied", "dismissed")
+                         for st in (c.get("drafts") or {}).values()))
+    return len(corrections), cleared
+
+
+def census(claims: list[dict], corrections: list[dict], run_date: str) -> dict:
+    counts = {m: 0 for m in MARKERS}
+    killed = failed = 0
+    tags: dict[str, str] = {}
+    for c in claims:
+        if c.get("killed"):
+            killed += 1
+            continue
+        m, tag, _ = claim_marker(c, run_date)
+        counts[m] += 1
+        if c.get("id"):
+            tags[str(c["id"])] = tag
+        if any(str((v or {}).get("result") or "").lower() == "fail"
+               for v in c.get("verifiers") or []):
+            failed += 1
+    reg, cleared = correction_summary(corrections)
+    total = sum(counts.values())
+    line = (f"{total} claims: {counts['verified']} verified live, {counts['reported']} reported, "
+            f"{counts['inferred']} inferred, {counts['carried']} carried.")
+    if counts["unsourced"]:
+        line += f" {counts['unsourced']} UNSOURCED."
+    if failed:
+        line += f" {failed} still in the brief after a verifier failed it."
+    if killed:
+        line += f" {killed} killed by the gate."
+    if reg == 0:
+        line += " 0 corrections registered."
+    elif cleared == reg:
+        line += (f" {reg} correction registered, cleared." if reg == 1 else
+                 f" {reg} corrections registered, {'both' if reg == 2 else 'all'} cleared.")
+    else:
+        noun = "correction" if reg == 1 else "corrections"
+        line += f" {reg} {noun} registered, {reg - cleared} still open."
+    return {"total": total, "counts": counts, "killed": killed, "failed_in_brief": failed,
+            "corrections": reg, "corrections_cleared": cleared, "tags": tags, "line": line}
+
+
+def claims_path(ctx: Ctx) -> pathlib.Path:
+    return ctx.trust_dir / "claims.json"
+
+
+def load_claims(ctx: Ctx) -> list[dict]:
+    p = claims_path(ctx)
+    if not p.exists():
+        return []
+    d = json.loads(p.read_text())
+    return d.get("claims", []) if isinstance(d, dict) else list(d)
+
+
+def cmd_claims(ctx: Ctx, a) -> int:
+    if a.claims_cmd == "record":
+        data = read_json_input(a.infile)
+        items = data.get("claims") if isinstance(data, dict) else data
+        if not isinstance(items, list):
+            die("claims record wants a JSON list of claims, or {\"claims\": [...]}")
+        missing = [i for i, c in enumerate(items, 1) if not (c.get("id") and c.get("text"))]
+        if missing:
+            die(f"every claim needs an id and its text; missing on item(s) {missing}")
+        ctx.trust_dir.mkdir(parents=True, exist_ok=True)
+        claims_path(ctx).write_text(json.dumps(
+            {"date": ctx.date, "recorded_at": now_iso(), "claims": items},
+            indent=2, ensure_ascii=False) + "\n")
+    claims = load_claims(ctx)
+    cs = census(claims, load_corrections(ctx), ctx.date)
+    if a.json:
+        print(json.dumps(cs, ensure_ascii=False))
+        return 0
+    print("CENSUS " + cs["line"])
+    if a.claims_cmd in ("record", "tags"):
+        for c in claims:
+            if c.get("killed"):
+                continue
+            m, tag, why = claim_marker(c, ctx.date)
+            print(f"  {tag:<9} {c['id']}: {why}")
+    return 1 if (cs["counts"]["unsourced"] or cs["failed_in_brief"]) else 0
+
+
+# ---------------------------------------------------------------------------
 # selftest: the verdict rules, proved, with no filesystem
 # ---------------------------------------------------------------------------
 
@@ -1084,13 +1235,53 @@ def cmd_selftest(ctx: Ctx, a) -> int:
     check("external_action list", required_verifiers({"external_action": ["confluence",
                                                                           "mattermost"]}), 2)
 
+
+    # 16. D6: a claim is verified only by an independent verifier that re-queried
+    D = "2026-09-29"
+    v_ok = {"id": "k1", "text": "t", "probe_agent": "p1", "source": "JQL", "read_at": "08:01",
+            "verifiers": [{"agent_id": "v1", "requeried": "Jira REST", "at": "2026-09-29T08:14"}]}
+    check("independent requery is verified", claim_marker(v_ok, D)[0], "verified")
+    check("verified tag carries the time", claim_marker(v_ok, D)[1], "[V 08:14]")
+    self_v = dict(v_ok, verifiers=[{"agent_id": "p1", "requeried": "Jira", "at": "08:14"}])
+    check("probe checking itself is only reported", claim_marker(self_v, D)[0], "reported")
+    no_req = dict(v_ok, verifiers=[{"agent_id": "v1", "at": "08:14"}])
+    check("a verifier that did not requery does not verify", claim_marker(no_req, D)[0],
+          "reported")
+
+    # 17. carried, inferred, unsourced, and a stale read counts as carried
+    check("carried from an earlier brief",
+          claim_marker({"id": "k", "text": "t", "carried_from": "brief #54"}, D)[0], "carried")
+    check("yesterday's read is carried",
+          claim_marker({"id": "k", "text": "t", "source": "x", "read_at": "2026-09-28T09:00"},
+                       D)[0], "carried")
+    check("re-queried today un-carries it",
+          claim_marker(dict(v_ok, carried_from="brief #54"), D)[0], "verified")
+    check("derived is inferred",
+          claim_marker({"id": "k", "text": "t", "derived_from": ["k1", "k2"]}, D)[0], "inferred")
+    check("nothing recorded is unsourced", claim_marker({"id": "k", "text": "t"}, D)[0],
+          "unsourced")
+
+    # 18. D7: the census line, killed claims excluded, corrections counted
+    cl = [v_ok, {"id": "k2", "text": "t", "source": "s", "read_at": "08:00"},
+          {"id": "k3", "text": "t", "derived_from": ["k1"]},
+          {"id": "k4", "text": "t", "carried_from": "brief #54"},
+          {"id": "k5", "text": "t", "killed": True}]
+    cr = [{"id": "c1", "drafts": {"gc": "applied"}}, {"id": "c2", "drafts": {}}]
+    cs = census(cl, cr, D)
+    check("census line", cs["line"], "4 claims: 1 verified live, 1 reported, 1 inferred, "
+          "1 carried. 1 killed by the gate. 2 corrections registered, both cleared.")
+    cs2 = census(cl[:1], [{"id": "c1", "drafts": {"gc": "open"}}], D)
+    check("open correction shows", cs2["line"].endswith("1 correction registered, 1 still open."),
+          True)
+
     if fails:
         print("SELFTEST FAILED")
         for f in fails:
             print("  " + f)
         return 1
-    print("selftest: 15 cases pass. READY is unreachable without distinct verifier ids, "
-          "and an open correction holds every draft in the session.")
+    print("selftest: 18 cases pass. READY is unreachable without distinct verifier ids, "
+          "an open correction holds every draft in the session, and a brief claim is "
+          "verified only by an independent re-query.")
     return 0
 
 
@@ -1136,6 +1327,11 @@ def main() -> int:
     p.add_argument("--routed", help="comma-separated routing rule ids firing this run")
     p.add_argument("--subagents", choices=["yes", "no"], default="yes")
 
+    p = sub.add_parser("claims", help="the brief's confidence census and markers (D6, D7)")
+    p.add_argument("claims_cmd", choices=["record", "census", "tags"])
+    p.add_argument("--in", dest="infile", default="-", help="claims JSON file, or - for stdin")
+    p.add_argument("--json", action="store_true")
+
     sub.add_parser("selftest", help="prove the verdict rules")
 
     a = ap.parse_args()
@@ -1145,7 +1341,7 @@ def main() -> int:
     return {
         "stamp": cmd_stamp, "correct": cmd_correct, "header": cmd_header,
         "packet": cmd_packet, "status": cmd_status, "preflight": cmd_preflight,
-        "selftest": cmd_selftest,
+        "selftest": cmd_selftest, "claims": cmd_claims,
     }[a.cmd](ctx, a)
 
 
