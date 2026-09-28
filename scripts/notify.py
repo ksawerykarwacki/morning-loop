@@ -186,16 +186,39 @@ def write_receipt(rec: dict) -> None:
     """
     RECEIPTS.mkdir(parents=True, exist_ok=True)
     out = RECEIPTS / f"{rec['date']}.json"
-    if rec.get("status") != "sent" and out.exists():
+    prior = None
+    if out.exists():
         try:
             prior = json.loads(out.read_text())
         except (json.JSONDecodeError, OSError):
             prior = None
-        if isinstance(prior, dict) and prior.get("status") == "sent":
-            print(f"notify: today's brief is already recorded as delivered, keeping that "
-                  f"receipt instead of writing '{rec.get('status')}'", file=sys.stderr)
-            return
-    out.write_text(json.dumps(rec, indent=2) + "\n")
+    if rec.get("status") != "sent" and isinstance(prior, dict) and prior.get("status") == "sent":
+        print(f"notify: today's brief is already recorded as delivered, keeping that "
+              f"receipt instead of writing '{rec.get('status')}'", file=sys.stderr)
+        return
+    out.write_text(json.dumps(carry_first_delivery(rec, prior), indent=2) + "\n")
+
+
+def carry_first_delivery(rec: dict, prior: dict | None) -> dict:
+    """Keep the FIRST delivery time across re-deliveries (V3-TO-V4 D3).
+
+    A same-day re-delivery (the brief updated in place when drafts land, or the
+    runner's safety net) rewrites `sent_at`, so on its own the receipt reports
+    the LAST send. On-time tracking needs the first one: lag against the fire is
+    measured to when the brief first reached the person. `on_time` is carried
+    too, so a re-delivery does not erase the runner's classification.
+    """
+    if not isinstance(prior, dict) or prior.get("status") != "sent":
+        return rec
+    if rec.get("status") != "sent":
+        return rec
+    first = prior.get("first_sent_at") or prior.get("sent_at")
+    out = dict(rec)
+    if first:
+        out["first_sent_at"] = first
+    if "on_time" in prior and "on_time" not in out:
+        out["on_time"] = prior["on_time"]
+    return out
 
 
 # --------------------------------------------------------------------------- md -> html

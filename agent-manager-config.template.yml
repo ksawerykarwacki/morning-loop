@@ -194,6 +194,15 @@ health:
   # Why this matters: a two-stage routine can succeed on its first half while the real
   # end deliverable never lands, so "did something run?" reports healthy. Check the END
   # artifact. This check caught a briefing that had silently failed twice.
+  # ON TIME, not just delivered (V3-TO-V4 D3). scripts/ontime.py measures the lag from
+  # schedule.time to the FIRST delivery, and whether the unattended runner or a person
+  # produced it. On the PO loop, delivery success said 20 of 27 weekdays; lag against
+  # the fire said 1 of 21. Keep schedule.time equal to the time your scheduler fires.
+  on_time:
+    script: "05-automation/agent-manager/scripts/ontime.py"
+    grace_minutes: 15               # delivered by the runner within this of the fire = unattended
+    window_weekdays: 10             # the rolling denominator the health line reports
+
 
 # ---------------------------------------------------------------------------
 # Dispatch: does the unattended prep DRAFT the day's SOLVE items, or only plan?
