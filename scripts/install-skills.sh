@@ -147,6 +147,21 @@ fi
 [ $DRY -eq 1 ] && echo "  (dry run, nothing will be written)"
 echo
 
+
+# ---------------------------------------------------------------------------
+# stock_copy <file>: true if the package has EVER shipped exactly this content.
+# A differing file that is a stock copy is safe to upgrade. One the package never
+# shipped is someone's own work and is kept: the new version goes beside it as
+# <name>.v4-new. Before v4 this script overwrote both, so a tuned skill silently
+# stopped loading. No git history means nothing can be proven stock, so keep it.
+# ---------------------------------------------------------------------------
+stock_copy() {
+  local h; h=$(git hash-object --no-filters "$1" 2>/dev/null) || return 1
+  grep -qx "$h" "$PKG/scripts/known-shipped-blobs.txt" 2>/dev/null && return 0
+  git -C "$PKG" rev-parse --git-dir >/dev/null 2>&1 || return 1
+  git -C "$PKG" cat-file -e "$h" 2>/dev/null
+}
+kept=0
 installed=0 skipped=0 replaced=0
 for dir in "$SRC"/*/; do
   name="${dir:A:t}"          # :A resolves the trailing slash away, :t takes the leaf
@@ -173,12 +188,14 @@ for dir in "$SRC"/*/; do
     if cmp -s "$src" "$dest"; then
       echo "  = $name: already current"; skipped=$((skipped+1)); continue
     fi
-    # Never silently overwrite someone's edited skill. Their version may be the
-    # better one: Xitong wrote a dev drafter the package does not have.
-    if [ $DRY -eq 0 ]; then
-      cp "$dest" "$dest.before-v3.1" 2>/dev/null
+    # Never overwrite someone's own skill. Their version may be the better one.
+    if ! stock_copy "$dest"; then
+      [ $DRY -eq 0 ] && cp "$src" "$dest.v4-new"
+      echo "  ! $name: yours (not a shipped version), KEPT. v4 is beside it as SKILL.md.v4-new"
+      kept=$((kept+1)); continue
     fi
-    echo "  ~ $name: differs from yours, backed up to SKILL.md.before-v3.1"
+    [ $DRY -eq 0 ] && cp "$dest" "$dest.before-v4" 2>/dev/null
+    echo "  ~ $name: stock copy upgraded, old one at SKILL.md.before-v4"
     replaced=$((replaced+1))
   else
     echo "  + $name"
@@ -190,7 +207,7 @@ for dir in "$SRC"/*/; do
 done
 
 echo
-echo "  new: $installed · updated: $replaced · unchanged/skipped: $skipped"
+echo "  new: $installed · upgraded: $replaced · yours kept: $kept · unchanged/skipped: $skipped"
 
 # ---------------------------------------------------------------------------
 # Commands. Skipping these is a reported failure, not a hypothetical one:
@@ -226,9 +243,14 @@ if [ -d "$CMD_SRC" ]; then
       awk -v n="$stem" 'NR==1 && /^---/ {print; print "name: " n; next} {print}' "$f" > "$staged"
     fi
 
-    if [ -f "$dest" ] && ! cmp -s "$staged" "$dest"; then
-      [ $DRY -eq 0 ] && cp "$dest" "$dest.before-v3.1"
-      echo "  ~ $stem: differs from yours, backed up to ${dest:t}.before-v3.1"
+    if [ -f "$dest" ] && ! cmp -s "$staged" "$dest" && ! stock_copy "$dest"; then
+      [ $DRY -eq 0 ] && cp "$staged" "$dest.v4-new"
+      echo "  ! $stem: yours (not a shipped version), KEPT. v4 is beside it as ${dest:t}.v4-new"
+      [ "$staged" != "$f" ] && rm -f "$staged"
+      continue
+    elif [ -f "$dest" ] && ! cmp -s "$staged" "$dest"; then
+      [ $DRY -eq 0 ] && cp "$dest" "$dest.before-v4"
+      echo "  ~ $stem: stock copy upgraded, old one at ${dest:t}.before-v4"
     elif [ -f "$dest" ]; then
       echo "  = $stem: already current"
       [ "$staged" != "$f" ] && rm -f "$staged"
@@ -259,9 +281,13 @@ if [ "$CLIENT" = "claude" ] && [ -d "$AGENT_SRC" ]; then
     name="${f:t}"; dest="$AGENT_TARGET/$name"
     [ "$name" = "README.md" ] && continue
     if [ -L "$dest" ]; then echo "  = ${name%.md}: symlinked, real target ${dest:A}"; continue; fi
-    if [ -f "$dest" ] && ! cmp -s "$f" "$dest"; then
+    if [ -f "$dest" ] && ! cmp -s "$f" "$dest" && ! stock_copy "$dest"; then
+      [ $DRY -eq 0 ] && cp "$f" "$dest.v4-new"
+      echo "  ! ${name%.md}: yours (not a shipped version), KEPT. v4 is beside it as $name.v4-new"
+      continue
+    elif [ -f "$dest" ] && ! cmp -s "$f" "$dest"; then
       [ $DRY -eq 0 ] && cp "$dest" "$dest.before-v4"
-      echo "  ~ ${name%.md}: differs from yours, backed up to $name.before-v4"
+      echo "  ~ ${name%.md}: stock copy upgraded, old one at $name.before-v4"
     elif [ -f "$dest" ]; then
       echo "  = ${name%.md}: already current"; continue
     else

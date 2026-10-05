@@ -367,11 +367,39 @@ SECTIONS = [
 STOP = re.compile(r"^##\s*(🗑️|✅|Findings|Honesty|Run economics)")
 
 
+# The brief decorates its headings ("## ── TOP OF YOUR LIST ──"), and the undecorated
+# pattern never matched, so every notification led with the first ASK instead of the
+# brief's own top item. Found 2026-10-05 on brief #60.
+TOP_HEADING = re.compile(r"^##+\s*[─—\-\s]*TOP OF YOUR LIST", re.I)
+
+
+def _explicit_top(md: str):
+    """The brief states its own top item under '## TOP OF YOUR LIST'. Use it.
+
+    Before 2026-08-20 this function did not exist and `top` was whatever the FIRST
+    bullet in the asks/decisions section happened to be. That mis-picked the top
+    item on four consecutive runs, because the first ASK is rarely the most
+    important thing in the brief. The brief already says what leads; read that.
+    """
+    lines = md.splitlines()
+    for i, raw in enumerate(lines):
+        if TOP_HEADING.match(raw.strip()):
+            for follow in lines[i + 1:]:
+                t = follow.strip()
+                if not t:
+                    continue
+                if t.startswith("#") or t.startswith("---"):
+                    break          # section ended without content
+                return strip_md(t)
+            break
+    return None
+
+
 def summarise(md: str) -> dict:
     """Counts per bucket + the single most important line, for the notification."""
     counts = {k: 0 for k, _ in SECTIONS}
     current = None
-    top = None
+    top = _explicit_top(md)
 
     for raw in md.splitlines():
         line = raw.strip()
@@ -389,7 +417,15 @@ def summarise(md: str) -> dict:
         # item above them, not separate items, and counting them inflated every
         # number in the notification (9/21/13 where the truth was 2/8/12).
         indent = len(raw) - len(raw.lstrip())
-        if current and indent <= 1 and re.match(r"^[-*]\s+(\[[ xX]\]\s*)?\S", line):
+        # Drafts are the checkbox lines only: the SOLVE section also lists
+        # "Skipped, with reasons" bullets, which counted 2 drafts as 5 on brief #60.
+        # Asks and your-turn items are bullets OR numbered items: the brief numbers
+        # them, and a bullets-only match read a brief with one ASK as zero.
+        if current == "drafts":
+            item = indent <= 1 and re.match(r"^[-*]\s+\[[ xX]\]\s*\S", line)
+        else:
+            item = current and indent <= 1 and re.match(r"^([-*]|\d+\.)\s+(\[[ xX]\]\s*)?\S", line)
+        if item:
             counts[current] += 1
             if current in ("asks", "decisions") and top is None:
                 top = strip_md(line)
@@ -689,6 +725,10 @@ def main() -> int:
         "status": status,
         "sent_at": (dt.datetime.now().astimezone().isoformat(timespec="seconds")
                     if delivered else None),
+        # When the page was made, sent or not. ontime.py counts a `file`-channel
+        # day as delivered and needs a time to measure it by; without this every
+        # such day read as "missed" (v4 runner port, 2026-10-05).
+        "rendered_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
     })
     if delivered:
         verb = f"delivered via {a.channel}"

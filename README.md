@@ -9,9 +9,13 @@
 
 # The Morning Loop — a shareable agent-manager for your day
 
-> **v4 (beta) is here.** Start with [`V4-WHATS-NEW.md`](V4-WHATS-NEW.md): what changed, how to set it up
-> (new: `scripts/setup-workspace.sh`, and a second launchd job so the brief makes itself), what to
-> expect in week 1, and the known issues.
+> **v4 (beta) is here.** Start with [`V4-WHATS-NEW.md`](V4-WHATS-NEW.md): what changed, how to set it up,
+> what to expect in week 1, and the known issues. **Already running the loop?** Upgrade with
+> `python3 scripts/upgrade.py --workspace <your workspace>` (dry run first). It keeps every skill, script,
+> rubric, config and runner you changed, and `--restore` undoes it.
+>
+> **The brief is made on your computer, so it arrives when your computer is on.** It runs at 07:52 on
+> weekdays, and if the machine is closed or asleep then, the first time you open it that morning.
 
 > **You are reading this in the standalone package repo.** Paths in these docs that begin
 > `05-automation/agent-manager/morning-loop-share/` refer to **this repo's root**. So

@@ -115,9 +115,9 @@ unless it is a weekday between 07:45 and 12:00 with no brief delivered yet. So t
 first time you genuinely open the laptop, the brief gets made. A lock stops the two
 jobs, or a hand-run `/morning`, from ever running at the same time.
 
-**Use the `macos` or `mattermost` channel with the catch-up.** It stops once the
-receipt says `sent`. The `file` channel never sends, so the catch-up would keep
-retrying until 12:00.
+**Channels and the catch-up.** The catch-up stops once today's brief exists: a
+`sent` receipt, or `rendered_not_sent` on the `file` channel. `macos` and
+`mattermost` push it to you; `file` only writes the page, so you have to open it.
 
 Step 3 is not optional. The first three scheduled runs in this package's own
 history failed for reasons a supervised run would have surfaced in seconds: a
@@ -178,27 +178,38 @@ One rule is built into that command: a brief is a snapshot of a **past** morning
 
 ## Scheduling the run (Windows)
 
-The Windows pendant of the launchd section above. Two templates, both under `scripts/`:
+The Windows pendant of the launchd section above, with the same two jobs: a 07:52
+prep run and a catch-up that retries at logon and every 15 minutes until a brief
+exists. `install-skills.sh` and the old `setup-workspace.sh` are zsh, so on Windows
+use the Python versions: `setup_workspace.py` builds the workspace (it copies the
+package in, because Windows only allows links in Developer Mode), and `upgrade.py`
+installs the skills, commands and agents and keeps the copies current after each
+`git pull`.
 
 ```powershell
-# 1. configure your runner
-Copy-Item scripts\run-prep.template.ps1 scripts\run-prep.ps1
-notepad scripts\run-prep.ps1              # fill the FILL lines: $WorkDir, $Claude, plan/automation paths
+# 0. workspace, then skills/commands/agents (both are dry-run safe; upgrade.py needs --apply)
+python scripts\setup_workspace.py C:\work\my-workspace <your-name>
+python scripts\upgrade.py --workspace C:\work\my-workspace --apply
+cd C:\work\my-workspace
+
+# 1. configure your runner: fill $WorkDir (and $Claude / $Python if they live elsewhere)
+Copy-Item 05-automation\agent-manager\scripts\run-prep.template.ps1 05-automation\agent-manager\run-prep.ps1
+notepad 05-automation\agent-manager\run-prep.ps1
 
 # 2. do ONE supervised run before handing it to Task Scheduler
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-prep.ps1; "exit $LASTEXITCODE"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\05-automation\agent-manager\run-prep.ps1; "exit $LASTEXITCODE"
 Get-Content 05-automation\agent-manager\taskscheduler.log -Tail 20
 
-# 3. only then, register the task (per-user, no admin)
-Copy-Item scripts\register-prep-task.template.ps1 scripts\register-prep-task.ps1
-notepad scripts\register-prep-task.ps1    # fill $RunPrep with the absolute path of your run-prep.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\register-prep-task.ps1
-Get-ScheduledTask -TaskName MorningLoop-Prep   # expect EXACTLY one entry
+# 3. only then, register BOTH tasks (per-user, no admin)
+Copy-Item 05-automation\agent-manager\scripts\register-prep-task.template.ps1 05-automation\agent-manager\register-prep-task.ps1
+notepad 05-automation\agent-manager\register-prep-task.ps1    # fill $RunPrep with the absolute path of your run-prep.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\05-automation\agent-manager\register-prep-task.ps1
+Get-ScheduledTask -TaskName MorningLoop-*      # expect EXACTLY two: MorningLoop-Prep and MorningLoop-Catchup
 ```
 
 `notify.env` works unchanged: the runner parses `export KEY=value` lines from `%USERPROFILE%\.config\morning-loop\notify.env`, so a Mattermost webhook set up per Option 2 is picked up on Windows too. `MORNING_NOTIFY_CHANNEL=macos` falls back to `file`; the runner adds a one-line Windows toast on top of whichever channel delivered.
 
-Exit codes (Task Scheduler "Last Run Result"): `0` delivered, `2` a second run for today was skipped, `3` no plan file written, `4` plan written but not delivered, `10` VPN never came up, `124` claude killed after 25 minutes.
+Exit codes (Task Scheduler "Last Run Result"): `0` delivered (or a catch-up tick with nothing owed), `2` another run holds the lock, `3` no plan file written, `4` plan written but not delivered, `10` the optional VPN never came up, `75` no network at fire time (the catch-up retries), `124` the watchdog stopped the run after its awake-time budget (`MORNING_WATCHDOG_SECS`, default 50 minutes).
 
 Three things that bite on Windows:
 

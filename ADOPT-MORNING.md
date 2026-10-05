@@ -24,6 +24,10 @@ You **do not edit the `/morning` command**. You copy one config file, fill in yo
 
 ---
 
+> **Already running the loop?** Don't follow the steps below from scratch. Run
+> `python3 scripts/upgrade.py --workspace <your workspace>` (a dry run that shows the plan), then add
+> `--apply`. It keeps everything you've changed. See `V4-WHATS-NEW.md`.
+
 ## Setup, v3.1: five steps, and the loop moulds itself to your role
 
 **v3.0 and earlier asked you to fill in a config by hand and then find out over a week what did not work.** Three developers spent that week discovering their drafters had never run once. That was not their config and not their role: the package shipped skills in a folder skills cannot load from, and nothing checked. v3.1 checks.
@@ -154,10 +158,11 @@ See `scripts/SETUP-DELIVERY.md`. Two notes from the first weeks of real running:
   machine: two in-slot runs took 8h53m and 7h04m end to end, while two runs that fired during working hours
   took about 4 minutes each. Check `pmset -g sched` and `pmset -g custom` before you record a run as
   unattended.
-- **OpenCode is supported in the shared code now**: `scripts/run-prep.opencode.template.sh`, plus client
-  detection in the doctor and the installer. **On Windows or Cursor, expect to patch the runner**, and
-  please contribute the patch back. Maria and Daniel Blam each fixed platform issues that are still not in
-  the shared code.
+- **OpenCode and Windows have v4 runners**: `scripts/run-prep.opencode.template.sh` and
+  `scripts/run-prep.template.ps1` with `register-prep-task.template.ps1`, each with the same catch-up, lock,
+  network wait and watchdog as the Mac runner. On Windows, use `setup_workspace.py` and `upgrade.py` (Python)
+  in place of the zsh scripts; `SETUP-DELIVERY.md` has the steps. Cursor is still untested: expect to patch,
+  and please contribute the patch back.
 
 ## The contract (why this is safe to run unattended)
 1. **Sense, plan and verify are read-only.** They only query and write local files. Safe to schedule.

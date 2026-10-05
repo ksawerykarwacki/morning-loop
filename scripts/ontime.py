@@ -110,7 +110,7 @@ def find_config(root: pathlib.Path, explicit: str | None) -> pathlib.Path | None
     if explicit:
         p = pathlib.Path(explicit).expanduser()
         return p if p.is_file() else None
-    user = (os.environ.get("USER") or "").lower()
+    user = (os.environ.get("USER") or os.environ.get("USERNAME") or "").lower()   # Windows sets USERNAME
     for tpl in CONFIG_CANDIDATES:
         raw = tpl.format(env=os.environ.get("MORNING_CONFIG", ""), repo=root, user=user)
         if raw and pathlib.Path(raw).is_file():
@@ -250,7 +250,8 @@ def classify(day: dt.date, receipt: dict | None, blocks: list[dict], s: dict) ->
     status = (receipt or {}).get("status")
     delivered = status in ("sent", "rendered_not_sent")
     first = (receipt or {}).get("first_sent_at")
-    stamp = first or (receipt or {}).get("sent_at")
+    stamp = first or (receipt or {}).get("sent_at") or (
+        (receipt or {}).get("rendered_at") if status == "rendered_not_sent" else None)
     at = to_local_naive(stamp) if delivered else None
     slept = sum(b.get("slept_min", 0) for b in todays)
     if slept:
@@ -511,6 +512,10 @@ def cmd_selftest(_e, _a) -> int:
     # 6. the machine froze mid-run: missed, and the sleep is reported, not a timeout
     r = classify(D(2026, 10, 1), {"status": "failed", "stage": "The Mac slept mid-run"}, b, s)
     check("slept minutes carried", r.get("slept_min"), 250)
+    # 6b. rendered_not_sent as notify.py really writes it: sent_at null, rendered_at set
+    r = classify(D(2026, 9, 29), {"status": "rendered_not_sent", "sent_at": None,
+                                  "rendered_at": "2026-09-29T07:58:00+02:00"}, b, s)
+    check("file channel measured by rendered_at", r["class"] != "missed", True)
     # 7. rendered_not_sent (channel file) counts as delivered
     r = classify(D(2026, 9, 29), {"status": "rendered_not_sent",
                                   "sent_at": "2026-09-29T07:58:00+02:00"}, b, s)

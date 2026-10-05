@@ -55,7 +55,9 @@ if [ "$IF_MISSING" = "1" ]; then
   # exit that most ticks take, so it must be cheap and must not touch the log.
   # Checks the RECEIPT, not the plan file: a plan file with a failed delivery is
   # still an undelivered brief, which is the whole point of the health contract.
-  grep -q '"status": "sent"' "$RECEIPT_G" 2>/dev/null && exit 0
+  # `rendered_not_sent` is the file channel's delivery: without it the catch-up
+  # re-ran the whole brief every 15 minutes until noon for file-channel users.
+  grep -qE '"status": "(sent|rendered_not_sent)"' "$RECEIPT_G" 2>/dev/null && exit 0
 fi
 
 # One run at a time. mkdir is atomic, so this is a real mutex rather than a
@@ -301,7 +303,7 @@ if printf '%s' "$RUN_LOG" | grep -q "watchdog: prep exceeded"; then
     >> "$WORKDIR/05-automation/agent-manager/run-log.md"
 fi
 
-if grep -q '"status": "sent"' "$RECEIPT" 2>/dev/null; then
+if grep -qE '"status": "(sent|rendered_not_sent)"' "$RECEIPT" 2>/dev/null; then
   echo "delivery: already delivered today, nothing to do" >> "$LOG"
 elif [ ! -f "$PLAN" ]; then
   # The run never produced a brief. Diagnose WHY from what claude actually said,
