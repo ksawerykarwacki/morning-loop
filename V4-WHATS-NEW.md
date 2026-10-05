@@ -2,7 +2,7 @@
 
 **Status: beta.** v4 passed two tests before release. The fresh-install test: a clean copy of this repo, installed into an empty home folder, set up into a new workspace, the doctor run, every script called, and the scheduled runner run end to end with a stand-in for Claude. The upgrade test: a v3.1 setup with someone's own work in it (a tuned skill, a personal skill and command, a patched script, a personal script and rubric, custom routing, a filled-in runner) upgraded to v4, checked byte for byte, then undone. Every bug those tests found is fixed in this release (list at the bottom).
 
-**Your brief is made on your computer, so it arrives when your computer is on.** There is no server. The loop runs on your laptop at 07:52 on weekdays, and if the laptop is closed or asleep then, it runs the first time you open it that morning (any time before 12:00). On the PO loop that means the brief is usually there shortly after the laptop is opened, around 8. A laptop that stays shut all morning gets no brief that day, and the loop says so the next time it runs.
+**Your brief is made on your computer, so it arrives when your computer is on.** There is no server. The loop runs on your laptop at 07:52 on weekdays, and if the laptop is closed or asleep then, it runs the first time you open it that morning (any time before 12:00). On the PO loop that means the brief is usually there shortly after the laptop is opened, around 8. A laptop that stays shut all morning gets no brief that day, and the next brief's on-time line counts that day as missed.
 
 `docs/history/V3-TO-V4.md` is the full proposal list with the evidence behind each row. This page only claims what is actually in this release.
 
