@@ -1,6 +1,6 @@
 # v3.1: role adaptation, contribution, and where the self-improvement actually lives
 
-> **Status: the packaging fix described below SHIPPED in v3.1 on 2026-08-21.** The package now ships `skills/<name>/SKILL.md` directories plus `commands/` and `rubrics/`, and `scripts/doctor.py` validates all of it. Read this for the reasoning; read `V3-1-WHATS-NEW.md` for what actually shipped.
+> **Status: the packaging fix described below SHIPPED in v3.1 on 2026-08-21.** The package now ships `skills/<name>/SKILL.md` directories plus `commands/` and `rubrics/`, and `scripts/doctor.py` validates all of it. Read this for the reasoning; read `docs/history/V3-1-WHATS-NEW.md` for what actually shipped.
 
 
 **Written 2026-08-21.** A design proposal, not a shipped release. Three questions: should the loop mould itself to each role, is that feasible, and where is the compounding loop.

@@ -26,7 +26,7 @@ Configurable per person:
 
 | `delivery.channel` | Good for | Notes |
 |---|---|---|
-| `email` | anyone who lives in their inbox (Tomek) | Delivered where you already triage. Pairs directly with attention-triage (see `ATTENTION-TRIAGE.md`). |
+| `email` | anyone who lives in their inbox (Tomek) | Delivered where you already triage. Pairs directly with attention-triage (see `docs/ATTENTION-TRIAGE.md`). |
 | `confluence_page` | anyone; team-visible | One rolling "My Morning Brief" page, updated in place each run. |
 | `mattermost_dm` | quick skim | One DM to yourself; keep it to the summary + a link. |
 | `local_file` | machine-bound setups only | The v1 default; only works if you're at that machine. |

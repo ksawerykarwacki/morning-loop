@@ -24,7 +24,7 @@ The same cause sits under the carry ladder: the `testDirection` question reached
 
 ## 2. His materiality rule for options, which is better than the one I wrote
 
-**The defect.** `V3-TO-V4.md` section 6 says the pattern is "**1 to 3 candidate plans** plus the agent's own open questions". A range invites padding to the middle of it, and I flagged the risk in the same paragraph without fixing it: three candidate plans on a mechanical job is theatre.
+**The defect.** `docs/history/V3-TO-V4.md` section 6 says the pattern is "**1 to 3 candidate plans** plus the agent's own open questions". A range invites padding to the middle of it, and I flagged the risk in the same paragraph without fixing it: three candidate plans on a mechanical job is theatre.
 
 **His rule.** Options appear **only** where the candidate answers change the outcome in materially different ways: a day of work, a different surface, a different default. Where there is one defensible answer there is **no options list**; the agent states the answer it would take and the question becomes a confirmation. A clean ticket gets **zero** questions. The count is bounded by the blocker test, not a quota.
 

@@ -1,0 +1,19 @@
+role: supporter
+title: Support
+lens:
+  leads_with: "escalations waiting on product, changes going live that users will ask about, and known issues with no answer yet"
+  top_of_list: "the user-facing issue with the most people affected and no answer yet"
+  voice: "user-first: what users see, what to tell them, who owns the fix"
+sections:
+  on: [state_of_world, top_of_list, solve, ask, decisions, your_turn, chat, inbox, coaching, findings]
+  off: [season_funnel, pulse, worth_sharpening, growth_circle, okr_progress]
+senses:
+  first: [inbox, chat, jira_board]
+  scope: "support escalations, launch tickets with a date, bugs with user reports"
+routing:
+  - {id: daily_spine, signal: daily, job: "Escalations, launches to brief, open known issues", skill: team-standup, bucket: auto, external_action: none}
+  - {id: inbox_triage, signal: daily, job: "Inbox ranked by urgency for users", skill: attention-triage, bucket: auto, external_action: none}
+  - {id: stall_escalation, signal: jira_state, job: "A user-reported bug stuck without an owner", skill: stall-escalation, bucket: draft, external_action: none}
+  - {id: routine_health, signal: daily, job: "Did yesterday's and today's brief land?", skill: null, bucket: decision, external_action: none}
+gaps:
+  - "support briefing drafts in the support team's language (needs examples first)"

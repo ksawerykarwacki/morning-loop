@@ -1,0 +1,19 @@
+role: data-analyst
+title: Data Analyst
+lens:
+  leads_with: "data requests waiting on you, experiments due a readout, and metrics that moved in a way someone will ask about"
+  top_of_list: "the readout or request a decision is waiting on soonest"
+  voice: "number-first, with the window and source next to every figure"
+sections:
+  on: [state_of_world, top_of_list, solve, ask, decisions, your_turn, chat, coaching, findings, pulse, season_funnel]
+  off: [worth_sharpening, growth_circle]
+senses:
+  first: [amplitude, jira_board, chat, meetings]
+  scope: "requests assigned to you, experiments you own, the squad's tracked metrics"
+routing:
+  - {id: daily_spine, signal: daily, job: "Requests, experiments and metric moves", skill: team-standup, bucket: auto, external_action: none}
+  - {id: metric_pulse, signal: daily, job: "Funnel and guardrail pulse", skill: product-pulse, bucket: auto, external_action: none}
+  - {id: okr_progress, signal: weekly, weekday: fri, job: "KR progress with sources", skill: okr-tracker, bucket: draft, external_action: none}
+  - {id: routine_health, signal: daily, job: "Did yesterday's and today's brief land?", skill: null, bucket: decision, external_action: none}
+gaps:
+  - "experiment readout write-ups (needs your own template and examples)"

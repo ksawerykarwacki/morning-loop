@@ -1,0 +1,23 @@
+role: product-owner
+title: Product Owner / Product Manager
+lens:
+  leads_with: "the sprint goal and anything that puts it at risk today, then decisions only you can make"
+  top_of_list: "the one decision or unblock that moves the sprint goal or a season KR most today"
+  voice: "decision-first: what changed, what it means for the goal, what to do"
+sections:
+  on: [state_of_world, top_of_list, solve, ask, decisions, your_turn, inbox, chat, coaching, worth_sharpening, findings, season_funnel, pulse]
+  off: []
+senses:
+  first: [jira_board, meetings, inbox, chat, amplitude]
+  scope: "the squad board, scoped by owner.jira_team_scope"
+routing:
+  - {id: daily_spine, signal: daily, job: "Standup prep, product pulse, next-best actions", skill: standup, bucket: auto, external_action: none}
+  - {id: sprint_report, signal: calendar, job: "Sprint report before review and planning", skill: sprint-reporting, bucket: draft, external_action: confluence}
+  - {id: sprint_plan, signal: sprint_event, when: start, job: "Planning prep: capacity, carryover, goal", skill: sprint-plan, bucket: draft, external_action: none}
+  - {id: okr_progress, signal: weekly, weekday: fri, job: "Weekly OKR progress against the goals file", skill: okr-tracker, bucket: draft, external_action: none}
+  - {id: meeting_debrief, signal: transcript_new, job: "Decisions, actions and ticket drafts from new meetings", skill: meeting-debrief, bucket: draft, external_action: jira}
+  - {id: stakeholder_update, signal: calendar, job: "Weekly stakeholder update", skill: growth-circle-update, bucket: draft, external_action: confluence}
+  - {id: backlog_health, signal: calendar, job: "Refinement agenda: stale, duplicate, ready", skill: backlog-analysis, bucket: draft, external_action: none}
+  - {id: inbox_triage, signal: daily, job: "Inbox ranked by the goals", skill: attention-triage, bucket: auto, external_action: none}
+  - {id: routine_health, signal: daily, job: "Did yesterday's and today's brief land?", skill: null, bucket: decision, external_action: none}
+gaps: []

@@ -97,7 +97,7 @@ Then record it, which is the part with no home today.
 
 **The workflow playbook has no field that can hold the only thing the KR measures.** Its entry standard is *Task → Tool(s) → Setup steps → Before time → After time → Improvement % → Skill/script link*. Every one of roughly 70 entries reads "added by {self}". Four months of cataloguing authorship and zero records of adoption.
 
-So `adoption-log.md` in this package exists to hold exactly that:
+So `docs/history/adoption-log.md` in this package exists to hold exactly that:
 
 ```markdown
 | skill | author | who ran it | date | worked? | needed the author? | notes |

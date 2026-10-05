@@ -20,7 +20,7 @@ It is the build behind Quick Win #1 in `jtbd-tomek-2026-06-19.md` — the single
 ## The contract (read before anything else)
 
 1. **Sense, plan, verify, draft and deliver are unattended and local.** Phases 1, 2, 2v, 2b, 2c and 2p may run with no human present (that is the scheduled pre-run). They query read-only sources, write local files, and deliver the brief to *you* on your own configured channel. Nothing else leaves the workspace.
-2. **Shipping is gated, and shipping is the only thing that ever was.** Producing a draft in `agent-drafts/` is a local file write, so the prep may do it (`dispatch.predraft_in_prep`). Sending it anywhere never happens without Tomek's explicit, per-item yes at the gate. The old gate asked permission to *start work*; this one asks permission to *release it*, which is where the risk always lived.
+2. **Shipping is gated, and shipping is the only thing that ever was.** Producing a draft in `agent-drafts/` is a local file write, so the prep may do it (`dispatch.predraft_in_prep`). Sending it anywhere never happens without the owner's explicit, per-item yes at the gate. The old gate asked permission to *start work*; this one asks permission to *release it*, which is where the risk always lived.
 3. **Nothing leaves the workspace automatically.** Creating/editing a Jira issue, publishing Confluence, posting to Mattermost, or sending any external message is in `permissions.never_auto`. Drafts are produced locally; shipping each one is a separate, individually-confirmed action in the review queue. This holds even after the morning approval. Delivering the brief to your own configured channel is not one of these: it moves already-sensed read-only output to you and tells nobody else.
 4. **A draft is not automation; a shipped-on-trigger job is.** Be honest in the run log about what actually ran autonomously vs. what you hand-triggered. This is the KR evidence trail.
 5. **A silent failure is worse than no automation**, because you think you are covered. Every run ends by verifying its own end deliverable (Phase 2c) and says so.
@@ -38,10 +38,10 @@ ARG="$(printf '%s' '$ARGUMENTS' | tr -d '[:space:]')"; if [ "$ARG" = "--prep" ] 
 
 The printed `MODE=` line is binding. Obey it and do not re-decide from the raw string.
 
-**If the probe cannot run, fall back and say so in one line.** It is a compound command, and some sandboxes (Tomek's unattended prep among them) refuse those. Then take the mode from the argument with surrounding whitespace stripped, treating `--prep` and `--prep\n` as identical, and honour `MORNING_MODE=prep` if it is set. **Never treat a whitespace-only argument as empty**, which is the exact bug this replaces. Trimming is a no-op where the argument is already clean and load-bearing where it is not.
+**If the probe cannot run, fall back and say so in one line.** It is a compound command, and some sandboxes (the PO loop's unattended prep among them) refuse those. Then take the mode from the argument with surrounding whitespace stripped, treating `--prep` and `--prep\n` as identical, and honour `MORNING_MODE=prep` if it is set. **Never treat a whitespace-only argument as empty**, which is the exact bug this replaces. Trimming is a no-op where the argument is already clean and load-bearing where it is not.
 
 - **MODE=prep** → run **Phase 0 → 1 → 2 → 2v → 2s → 2b → 2c → 2p**: preflight, fan-out sense, plan, verify the findings, **deliver the brief on time**, notify, health-check, then pre-draft the SOLVE work and update the same brief in place when the drafts land. This is what the scheduled pre-run invokes on weekday mornings. No shipping, no questions (no human is present).
-- **MODE=interactive** (Tomek runs it when he sits down) → if today's plan file exists, **load it, load the pre-drafts, and skip to Phase 3**; otherwise run Phases 0 to 2c inline, then Phase 3. If the prep already delivered today's brief, do not re-send it, say so and move to the gate.
+- **MODE=interactive** (you run it when you sit down) → if today's plan file exists, **load it, load the pre-drafts, and skip to Phase 3**; otherwise run Phases 0 to 2c inline, then Phase 3. If the prep already delivered today's brief, do not re-send it, say so and move to the gate.
 
 **Phase order matters and it is deliberate.** The brief is delivered *before* pre-drafting starts, so a run that dies mid-draft has still delivered everything it had, and the brief never waits behind the slowest thing in the run. Never reorder these to draft first.
 
@@ -88,6 +88,17 @@ Print: `PREFLIGHT: Atlassian ✅ · M365 ✅ · Amplitude ✅ · Granola ⚠️ 
 
 ---
 
+## Phase 0b · ROLE LENS (v4: the loop shapes itself to who runs it)
+
+The loop was built around one product owner. Run unchanged for an engineer or a designer, it leads with OKRs they don't own and sections that are noise to them. So before sensing, read the owner's role preset and let it shape the run.
+
+1. **Resolve the preset.** `owner.role_profile` names a file in the package's `roles/` folder: try `05-automation/agent-manager/morning-loop-share/roles/{profile}.yml`, then `05-automation/agent-manager/roles/{profile}.yml` (copied workspaces). No `role_profile` set: behave as `product-owner`, and add one line to the brief's footer: "No role preset set. Add `owner.role_profile` (see roles/README.md) so the brief leads with your work."
+2. **Apply the lens.** `lens.leads_with` decides what STATE OF YOUR WORLD opens with. `lens.top_of_list` is the rule for choosing TOP OF YOUR LIST. `lens.voice` is how findings are phrased.
+3. **Apply the sections.** A section in `sections.off` is not rendered and is not listed as degraded: it was switched off on purpose. The PO-flavoured ones (season funnel, pulse, worth sharpening, Growth Circle, OKR progress) are off for most roles. Config wins over the preset: if the owner's config enables a block, render it.
+4. **Order the senses.** Probe `senses.first` before the rest, and scope Jira by `senses.scope` together with `owner.jira_team_scope`.
+5. **Routing comes from the config, never from the preset.** The preset only seeded the starter config. The owner's own rules, including ones they wrote themselves, are what fires. Never add or drop a rule at runtime because a preset says so.
+6. **Name the role's gaps once a week, not daily.** On the first run of the week, if the preset lists `gaps`, add one line under FINDINGS: the jobs this role has that no shipped skill drafts yet, and that `/jtbd-capture` plus CONTRIBUTING.md is how one gets built.
+
 ## Phase 1 · SENSE (read-only, fan-out, one bounded context per probe)
 
 **This phase is a fan-out, not a chain.** The probes below share no data with each other: the Jira board does not read the pulse, the ledger does not read Every.to, the inbox does not read the Decision Log. Running them end to end inside one growing context is what has been dropping the tail of the list, and the run log names the casualties by name: *"no Every.to; no ExoClick; commitments ledger still unreconciled (4th run)"*. The dropped work is always the last work in the chain. That is a topology symptom, not a diligence one, and no amount of trying harder fixes it.
@@ -129,11 +140,11 @@ This is the direct fix for the loop's most repeated defect. Four separate runs m
 | `reading` | Every.to, only if `reading.enabled` is not false | new items or an explicit "nothing new" | cheap |
 | ~~`ads`~~ | ExoClick | **off since 2026-09-24**: no ads running there. Do not run it, do not list ExoClick as a degraded source, do not report campaign status. The one exception is the leaked-token rotation in hygiene, which is a security item and stays until it is done. Re-enable only when it is back in `sense.probes` | n/a |
 
-**Meeting capture is scoped, and the scope is a squad agreement, not a technical limit (set 2026-08-20).** Maria runs and records the squad ceremonies: standup, refinement, sprint review, retro and planning. **The loop does not write note files for those**, because a second unofficial record of a ceremony someone else owns creates two sources of truth and the loop's copy is the weaker one. It still *reads* her ceremony pages, which is where the Decision Log gap checks come from.
+**Meeting capture is scoped, and the scope is a squad agreement, not a technical limit (set 2026-08-20).** The Scrum Master (or whoever owns ceremonies in your squad) runs and records the squad ceremonies: standup, refinement, sprint review, retro and planning. **The loop does not write note files for those**, because a second unofficial record of a ceremony someone else owns creates two sources of truth and the loop's copy is the weaker one. It still *reads* her ceremony pages, which is where the Decision Log gap checks come from.
 
 What the loop does capture is **every other meeting**: one-to-ones, design sessions, cross-squad calls, stakeholder conversations, anything with no other owner. Those have no scribe today and are exactly where commitments go missing. If a meeting's ownership is unclear, capture it and mark `owner: unconfirmed` in the file rather than silently skipping it.
 
-**Squad-scope guard, enforced inside the probe.** `KM` is shared across squads. `jira_board` runs the scoped query and drops anything that fails it; a ticket that matters but is out of scope is labelled as another squad's, never listed as Tomek's. Pattern matching a key or a familiar-looking summary has pulled other-squad tickets into a plan twice. The guard lives in the probe because a guard applied after the fan-in is a guard applied to claims whose provenance has already been flattened.
+**Squad-scope guard, enforced inside the probe.** A shared Jira project needs this guard (`owner.jira_team_scope`). `jira_board` runs the scoped query and drops anything that fails it; a ticket that matters but is out of scope is labelled as another squad's, never listed as the owner's. Pattern matching a key or a familiar-looking summary has pulled other-squad tickets into a plan twice. The guard lives in the probe because a guard applied after the fan-in is a guard applied to claims whose provenance has already been flattened.
 
 **Model tiering.** Probes marked `cheap` are bounded extraction: run a JQL, read a chart, list an inbox, return the shape. They do not need the session model and `sense.probe_model_cheap` routes them down. Judgment lives in Phase 2 and in the verifiers, and that is where the expensive tokens belong.
 
@@ -157,13 +168,13 @@ The loop's job is to close things, not to describe them. A finding that gets re-
 | **ASK** | The agent knows the fix but is missing exactly **one** fact. | Ask **one closed question** whose answer unblocks the work. Never restate the problem instead. |
 | **HUMAN** | Genuine judgment, relationship, or authority. | Hand it over cleanly with the context already gathered. |
 
-**Write the ASKs to a file he answers inline, not into the brief as prose.** This is the fix for the defect that has blocked the loop for a month: between 2026-08-28 and 2026-09-24 the loop asked 9 things and recorded 0 answers, not because he was unwilling but because answering meant a second trip to a terminal.
+**Write the ASKs to a file the owner answers inline, not into the brief as prose.** This is the fix for the defect that has blocked the loop for a month: between 2026-08-28 and 2026-09-24 the loop asked 9 things and recorded 0 answers, not because they were unwilling but because answering meant a second trip to a terminal.
 
 ```
 python3 05-automation/agent-manager/scripts/asks.py --date {DATE} render --in /tmp/asks-{DATE}.json
 ```
 
-Each ask is `{question, why_it_matters, ask (who can answer), options[] OR recommendation, evidence[], carried}`. **`why_it_matters` is mandatory and names what changes depending on the answer**; if nothing changes it is not a blocker and does not belong in front of him. **Options appear only where the candidate answers change the outcome in materially different ways.** Where there is one defensible answer, drop the list, set `recommendation`, and the question becomes a confirmation. A one-item options list is refused. A clean run gets zero questions, and the file is still written, because absence and zero must not look identical.
+Each ask is `{question, why_it_matters, ask (who can answer), options[] OR recommendation, evidence[], carried}`. **`why_it_matters` is mandatory and names what changes depending on the answer**; if nothing changes it is not a blocker and does not belong in front of them. **Options appear only where the candidate answers change the outcome in materially different ways.** Where there is one defensible answer, drop the list, set `recommendation`, and the question becomes a confirmation. A one-item options list is refused. A clean run gets zero questions, and the file is still written, because absence and zero must not look identical.
 
 **Every run, read last run's answers first and carry the rest:**
 
@@ -211,7 +222,7 @@ A finding the loop can fix and instead describes is not a finding, it is a chore
 1. **Verify the new value** from the source, with a verbatim excerpt, exactly like a probe claim. The current Decision Log page id is whatever the live Confluence search returns for the current sprint, not what looks right.
 2. **Edit the config in place**, one value per fix.
 3. **Record the before and after in the run log**, in the form `config: {key}: {old} -> {new} ({how it was verified})`. The repo is under git, so any bad edit is one `git diff` from being seen and one `git checkout` from being gone.
-4. **Never self-edit these**: `permissions`, `delivery`, `schedule`, and `sprint.anchor_start`. The safety contract, the delivery contract and the cadence anchor are Tomek's. A loop that widens its own permissions is not a loop worth running.
+4. **Never self-edit these**: `permissions`, `delivery`, `schedule`, and `sprint.anchor_start`. The safety contract, the delivery contract and the cadence anchor are the owner's. A loop that widens its own permissions is not a loop worth running.
 
 If the correct value cannot be verified, it stays an ASK with a closed question. Guessing a config value is worse than a stale one, because a stale value fails loudly and a wrong one fails quietly.
 
@@ -227,6 +238,7 @@ Walk every rule in `routing` and decide if it fires today:
 | `daily` | always (working day) |
 | `calendar` | a `meetings` entry is exactly `prep_lead_days` away (respect its `sprint_phase` gate if set) |
 | `sprint_event` | today is sprint start (`when: start`) or sprint end (`when: end`) |
+| `weekly` | today is the rule's `weekday` (`mon` to `fri`, default `fri`) |
 | `transcript_new` | Phase 1 found a new transcript not yet debriefed |
 | `metric_event` | Phase 1 pulse flagged significance / overdue read |
 | `jira_state` | Phase 1 found stale or nearly-done tickets |
@@ -349,7 +361,7 @@ Do not spawn an agent per pair. Compare the claim lists directly, and dispatch a
 
 ## Phase 2s · COACH + SHARPEN (two short sections, both earned, both capped)
 
-These are the two things Tomek asked the loop to do for him rather than for his work. They run after the findings are verified and before delivery, because they belong in the brief and the brief is what he reads.
+These are the two things the owner asked the loop to do for them rather than for their work. They run after the findings are verified and before delivery, because they belong in the brief and the brief is what they read.
 
 ### 2s·a Coaching, every morning, one nudge
 
@@ -371,8 +383,8 @@ python3 05-automation/agent-manager/scripts/coach.py --date {DATE} nudge --zoom 
 # the file's contents:
 {"thread": "{thread id}",
  "observation": "{what you actually see, with the evidence in it}",
- "in_your_control": "{the part he can change today}",
- "not_in_your_control": "{the part he can put down, named so he stops paying rent on it}",
+ "in_your_control": "{the part they can change today}",
+ "not_in_your_control": "{the part they can put down, named so they stop paying rent on it}",
  "today_action": "{one thing, doable between the brief and lunch}",
  "evidence": ["{run-log line / ledger row / brief id / file path}"],
  "closes_observations": ["{observation ids this resolves}"]}
@@ -383,11 +395,11 @@ python3 05-automation/agent-manager/scripts/coach.py --date {DATE} nudge --zoom 
 Four rules for the writing itself:
 
 - **Evidence or nothing.** A run-log line, a ledger row, a brief id, a date. He will check. An unfalsifiable observation costs the whole thread its credibility.
-- **Stoic means practical.** `not_in_your_control` exists so he can put something down, not so the nudge can sound wise.
+- **Stoic means practical.** `not_in_your_control` exists so they can put something down, not so the nudge can sound wise.
 - **Growth means the delta.** "You closed three of four findings this week against one of six last week" is coaching. "You are good at detection" is a compliment and does nothing.
 - **One ask, today-sized.** If it cannot be done before lunch it is a project, not a nudge.
 
-**The plan is not recited.** `coach/plan.md` holds the long-term threads and the brief never quotes it, which is what he asked for. It is a file in his own repo and `coach.py plan` prints it in full, so it is undisclosed by default and never withheld on request. Never claim there is no plan.
+**The plan is not recited.** `coach/plan.md` holds the long-term threads and the brief never quotes it, which is what the owner asked for. It is a file in their own repo and `coach.py plan` prints it in full, so it is undisclosed by default and never withheld on request. Never claim there is no plan.
 
 ### 2s·b Product feedback, occasionally, and usually not at all
 
@@ -399,7 +411,7 @@ python3 05-automation/agent-manager/scripts/sharpen.py --date {DATE} candidates 
   [--signal meeting="{a decision meeting today or tomorrow}"]
 ```
 
-Pass the signals this run actually found: an experiment the pulse flagged, a goal being set at a sprint boundary, a decision meeting on the calendar. It also watches `04-features/` on its own. **`{"challenge": false}` is the normal answer.** **Render the section anyway with the reason**, for the same rule as above: `WORTH SHARPENING: nothing, no decision signal` is information, an absent section is not, and a silently broken `sharpen.py` must not look like a quiet week. Do not force a challenge, do not save one up, and never argue with the cooldown: a challenge every morning is the thing he explicitly did not ask for.
+Pass the signals this run actually found: an experiment the pulse flagged, a goal being set at a sprint boundary, a decision meeting on the calendar. It also watches `04-features/` on its own. **`{"challenge": false}` is the normal answer.** **Render the section anyway with the reason**, for the same rule as above: `WORTH SHARPENING: nothing, no decision signal` is information, an absent section is not, and a silently broken `sharpen.py` must not look like a quiet week. Do not force a challenge, do not save one up, and never argue with the cooldown: a challenge every morning is the thing they explicitly did not ask for.
 
 When one fires, write **one closed question** about the specific claim, number or assumption, and record it:
 
@@ -431,7 +443,7 @@ python3 05-automation/agent-manager/scripts/notify.py \
 - **Report the outcome from the receipt, not from the fact that you ran the command.** The script always writes `05-automation/agent-manager/delivery-receipts/{DATE}.json`, on success and on failure. On a non-zero exit, read the receipt's `error` field and surface it verbatim. A failed delivery summarised as "delivered" is the precise failure this phase exists to prevent.
 - **The notification is one line**, carrying the counts and the single top item. Its job is to get you to open the brief, not to be the brief.
 - **The brief itself is the whole update**, in the order below. Never a teaser with a link and nothing else. The script renders the plan file's markdown, so a well-written plan file becomes a well-formatted page: write the plan file properly and delivery takes care of itself.
-- **Call things by their name, never by their id (Tomek, 2026-09-24).** A ticket reads as its plain name ("the shortened signup build", "the Icebreakers second read"), and an experiment reads as its name ("the intent-driven signup experiment", "Icebreakers", "Plus retention"), never as `KM-14881` or `10442808`. He does not know what the numbers are, and a name is what lets him answer in one read. If a key is needed for traceability, put it once in brackets after the name, e.g. "the shortened signup build (KM-14881)", and never as the subject of a sentence. Amplitude object ids and Confluence page ids stay in the evidence and source lines, out of the prose. The same goes for internal jargon: if a phrase like "the gate's signup prompt" needs a gloss to be understood, write the gloss instead of the phrase. **This is enforced, not just asked for:** `.claude/hooks/house-rules.mjs` denies any Write or Edit to `morning-plan-{DATE}.md` that has a bare `KM-` key or an 8-digit experiment id outside a `Source:`/`Evidence:` line, in both `--prep` and interactive runs. When it fires, rewrite the line with the name; do not route the write through Bash to get around it. To find a name, read the ticket summary from Jira or the experiment's `name` from Amplitude; never make one up.
+- **Call things by their name, never by their id (PO loop, 2026-09-24).** A ticket reads as its plain name ("the shortened signup build", "the Icebreakers second read"), and an experiment reads as its name ("the intent-driven signup experiment", "Icebreakers", "Plus retention"), never as `KM-14881` or `10442808`. He does not know what the numbers are, and a name is what lets them answer in one read. If a key is needed for traceability, put it once in brackets after the name, e.g. "the shortened signup build (KM-14881)", and never as the subject of a sentence. Amplitude object ids and Confluence page ids stay in the evidence and source lines, out of the prose. The same goes for internal jargon: if a phrase like "the gate's signup prompt" needs a gloss to be understood, write the gloss instead of the phrase. **This is enforced, not just asked for:** `.claude/hooks/house-rules.mjs` denies any Write or Edit to `morning-plan-{DATE}.md` that has a bare `KM-` key or an 8-digit experiment id outside a `Source:`/`Evidence:` line, in both `--prep` and interactive runs. When it fires, rewrite the line with the name; do not route the write through Bash to get around it. To find a name, read the ticket summary from Jira or the experiment's `name` from Amplitude; never make one up.
 - **`#id`.** The script numbers each brief and puts it in the title, which is what makes `morning loop #21` and `/brief 21` work later. Same date always reuses the same id, so a re-delivery never burns a number.
 
 ```
@@ -468,7 +480,7 @@ Confidence: {census line from trust.py claims census, verbatim, e.g. "41 claims:
   - Commitments: {n carried}        - Meetings: {n notes written} · {n ceremony pages read} · {n action points pulled into meeting-actions}
 
 ── OPEN QUESTIONS ──   ({n} asked, {a} answered since last run, {o} open)
-{EVERY open question printed in full, here, in the brief (Tomek, 2026-09-28: "I don't
+{EVERY open question printed in full, here, in the brief (PO loop, 2026-09-28: "I don't
  want to have to go to other files"). Per question: the question, why it matters, the
  options or the default answer, carry count. Never a count plus a pointer.}
 Answer in {questions file path}. No command, type under **Answer:** and save.
@@ -604,7 +616,7 @@ So when `dispatch.predraft_in_prep` is true, the unattended prep **does the SOLV
    python3 05-automation/agent-manager/scripts/tickets.py --date {DATE} draft --in /tmp/actions-{DATE}.json
    # the file's contents:
    [{"kind": "ticket", "title": "[FE] ...", "issue_type": "Story", "role": "{accountable role}",
-     "epic": "KM-...", "verified_keys": ["{every KM key you confirmed on board 1847/1946}"],
+     "epic": "KM-...", "verified_keys": ["{every key you confirmed on one of owner.jira_boards}"],
      "context": "...", "problem": "...", "what_we_need": "...", "why_this_matters": "...",
      "acceptance_criteria": ["..."],
      "source": {"meeting": "...", "when": "...", "fidelity": "verbatim|summary",
@@ -640,7 +652,7 @@ So when `dispatch.predraft_in_prep` is true, the unattended prep **does the SOLV
    - **An update names its channel and sources its numbers**, and a hygiene-queue item never becomes an update, because `hygiene.never_external` is set and the whole point of that queue is that the finding is true, actionable and not for the room.
    - **The stub rule.** Set `fidelity` honestly. Granola transcripts are summary-level paraphrase, so acceptance criteria written from one are invented. A `summary` source ships as a **STUB with exactly one criterion**, `confirm scope with {role} before estimating`, and five invented ones are a validation error, not a nicer draft. A stub someone confirms in 40 seconds beats a plausible ticket nobody trusts.
 
-   Also required: a verbatim `source.excerpt` on every ticket, a role tag in the title with the assignee left empty, and every referenced KM key listed in `verified_keys` after you actually confirmed it sits on board 1847 or 1946. `KM` is shared. A blocked ticket is rendered with its reason and **cannot be approved until it is fixed**, so re-draft it rather than arguing with the checker.
+   Also required: a verbatim `source.excerpt` on every ticket, a role tag in the title with the assignee left empty, and every referenced KM key listed in `verified_keys` after you actually confirmed it sits on one of `owner.jira_boards`. `KM` is shared. A blocked ticket is rendered with its reason and **cannot be approved until it is fixed**, so re-draft it rather than arguing with the checker.
 5. Skip, and say why, any item whose inputs are missing (a degraded probe, an unanswered ASK). A skipped item is listed in the brief as skipped, never silently dropped.
 6. **Build the review packet, and rebuild it after every stamp.** One file holds every draft, its computed verdict, its ship action and its full text, so the review is a single pass down one page rather than a directory crawl:
 
@@ -660,7 +672,7 @@ The brief then carries the drafts, so the 🤖 section reads:
   2. ⚠️ Refinement agenda    NEEDS EDIT   .../{DATE}/refinement.md     (issue: 2 candidates missing acceptance criteria)  · expires 11:00 today
 ```
 
-**This changes the honest accounting, in the direction that matters.** A job that was scheduled, drafted unattended, cleared every check, and shipped without a heavy rewrite is the definition the run log has been using for "truly autonomous" all along, and until now the loop has structurally been unable to produce one, because drafting could not happen unattended. Keep the bar exactly where it is. A pre-drafted item that Tomek rewrites before shipping is still tooling coverage, and the run log still says so.
+**This changes the honest accounting, in the direction that matters.** A job that was scheduled, drafted unattended, cleared every check, and shipped without a heavy rewrite is the definition the run log has been using for "truly autonomous" all along, and until now the loop has structurally been unable to produce one, because drafting could not happen unattended. Keep the bar exactly where it is. A pre-drafted item that the owner rewrites before shipping is still tooling coverage, and the run log still says so.
 
 **This phase runs after delivery, on purpose.** Drafting six items with independent verification takes far longer than sensing and planning, and the brief must not wait behind it: you would be reading yesterday's arrival time for the same information. So the brief goes out on schedule with the 🤖 section marked `drafting…`, and when the drafts land this phase **updates the same brief in place and re-runs the notifier with the same `{DATE}`**, which reuses the same `#id` rather than burning a new one. Second notification, one line: `🤖 {n} drafts ready ({ready} READY). /morning to ship.`.
 
@@ -705,7 +717,7 @@ Wait for the answer either way. This is the permission gate, and nothing externa
 Each 🤖 item runs as a short **pipeline, not a single shot**, whether Phase 2p ran it unattended at 07:52 or you asked for it at the gate. One definition, two callers. This draft → verify → revise loop is the rung-three step: the agent checks its own output so it reaches you good enough to ship, not something you send back.
 
 1. **Draft.** A sub-agent runs the named `skill` with today's sensed context and writes its output to `paths.review_dir` as `{job-id}.md`.
-2. **Verify (independent skeptic, per-check).** A *separate* agent — never the one that drafted it — resolves the job's rubric: `{paths.rubrics_dir}/{skill}.rubric.yml` extended by `_base.rubric.yml`, falling back to `_base` alone if no skill rubric exists. It grades the draft **check by check**, not with a vibe score, and it reads the rubric's `calibration_target` and `_base`'s `tolerances` first. **The target names the reader to grade against, and it is never Tomek's voice. If the reason you are about to fail a judgement check appears in `tolerances`, the verdict is `pass`.** Failing a draft for phrasing, ordering, formatting or for being shorter than expected is the specific error this exists to stop — for each check it applies the grader contract *"Apply this single check to the artifact. Return pass | fail | n/a and one sentence why"* and defaults to `fail` when uncertain. Returns `{per_check: [{id, result, reason}], failed: [...], ready: bool}` where `ready` = **every applicable check passes**. Any `block`-severity fail (invented facts, ungrounded targets) = hard NEEDS-EDIT regardless of the rest. (See `rubrics/README.md` for the full grading contract.)
+2. **Verify (independent skeptic, per-check).** A *separate* agent — never the one that drafted it — resolves the job's rubric: `{paths.rubrics_dir}/{skill}.rubric.yml` extended by `_base.rubric.yml`, falling back to `_base` alone if no skill rubric exists. It grades the draft **check by check**, not with a vibe score, and it reads the rubric's `calibration_target` and `_base`'s `tolerances` first. **The target names the reader to grade against, and it is never the owner's voice. If the reason you are about to fail a judgement check appears in `tolerances`, the verdict is `pass`.** Failing a draft for phrasing, ordering, formatting or for being shorter than expected is the specific error this exists to stop — for each check it applies the grader contract *"Apply this single check to the artifact. Return pass | fail | n/a and one sentence why"* and defaults to `fail` when uncertain. Returns `{per_check: [{id, result, reason}], failed: [...], ready: bool}` where `ready` = **every applicable check passes**. Any `block`-severity fail (invented facts, ungrounded targets) = hard NEEDS-EDIT regardless of the rest. (See `rubrics/README.md` for the full grading contract.)
 3. **Revise (at most `quality.max_revisions`).** If any check failed, hand the draft back to the skill with the **failed checks' statements + the verifier's one-line reasons** — the specific fixes, not "make it better" — then re-verify. Stop after `max_revisions`; never loop indefinitely.
 4. **Adjudicate disagreements with a third agent (`quality.disagreement_judge`).** When two verifiers run and they disagree on any check, **spawn a judge**. The judge sees the artifact, the disputed checks only, and both verdicts with their one-line reasons. It does not see which verifier said what, and it decides **per disputed check** with a reason. Its verdict is final.
 
@@ -713,9 +725,9 @@ Each 🤖 item runs as a short **pipeline, not a single shot**, whether Phase 2p
    - **A `block`-severity fail that BOTH verifiers agree on is not disputed and is not sent to the judge.** Invented facts and ungrounded numbers never get a second hearing.
    - The judge rules on the checks in dispute, not on whether the artifact is good overall. "It reads well" is not an adjudication of `targets_flag_iren`.
 
-   Disagreement is a normal outcome, not an error state. The 2026-08-19 GC update is the worked example: one verifier passed 17 of 17 and called the voice unmistakably Tomek's, the other failed `ready_to_ship` and `slf_fields_terse`. Those two checks are exactly what a judge should have settled, and the 15 they agreed on should never have reached it.
+   Disagreement is a normal outcome, not an error state. The 2026-08-19 GC update is the worked example: one verifier passed 17 of 17 and called the voice unmistakably the owner's, the other failed `ready_to_ship` and `slf_fields_terse`. Those two checks are exactly what a judge should have settled, and the 15 they agreed on should never have reached it.
 
-5. **Label.** Tag the final draft `READY` (all checks pass, after adjudication) or `NEEDS YOUR EDIT` (a check still fails), and write the per-check results, the judge's rulings, and any residual failed checks into the top of the draft file so Tomek sees exactly what to fix.
+5. **Label.** Tag the final draft `READY` (all checks pass, after adjudication) or `NEEDS YOUR EDIT` (a check still fails), and write the per-check results, the judge's rulings, and any residual failed checks into the top of the draft file so the owner sees exactly what to fix.
 
 **Scale rigor to risk.** If `quality.stricter_for_external` is set, any job whose `external_action` is not `none` (Confluence publish, Jira create, Mattermost post) gets **two independent verifiers**, and is marked ready only if **both** pass every check. Local-only drafts get one verifier.
 
@@ -752,7 +764,7 @@ python3 05-automation/agent-manager/scripts/shipped.py add \
   --job {job} --to "{the real page id / ticket key / channel}" --by loop
 ```
 
-The `verified` column is read from the stamp, not typed, so a draft that went out ungraded says so in the ledger permanently. That is the point: a ledger that cannot embarrass the loop is decoration. **Tomek shipping something by hand runs the same command with `--by hand`, and that is the path that matters** — loop-initiated sends were always countable, his were invisible. `/shipped` is the shorthand.
+The `verified` column is read from the stamp, not typed, so a draft that went out ungraded says so in the ledger permanently. That is the point: a ledger that cannot embarrass the loop is decoration. **the owner shipping something by hand runs the same command with `--by hand`, and that is the path that matters** — loop-initiated sends were always countable, their were invisible. `/shipped` is the shorthand.
 
 If a ship is refused mid-queue, record nothing. The ledger holds what left, never what was intended.
 
@@ -784,7 +796,7 @@ python3 .../tickets.py outcome --uid 2026-09-16/i1 \
 
 The question this makes answerable is worth more than the chain itself: **which meetings produce decisions that survive.** If Season Planning decisions get reversed within a sprint and Design and Refine decisions do not, that is a measurable fact about how the squad decides, and nothing else in this workspace can see it.
 
-**Close the coaching and challenge loops here too, when he answers them.** An unanswered nudge is not a neutral result, it is the coaching equivalent of a carried item:
+**Close the coaching and challenge loops here too, when the owner answers them.** An unanswered nudge is not a neutral result, it is the coaching equivalent of a carried item:
 
 ```
 python3 05-automation/agent-manager/scripts/coach.py   respond --id {n7} --outcome acted|declined|deferred
@@ -809,7 +821,7 @@ Track four things across runs, because each one points at a different repair:
 
 The first two are about output quality, the last two about whether the loop is aimed at the right work. Keep them distinct; they have never had the same cause.
 
-Then one-line confirm to Tomek:
+Then one-line confirm to the owner:
 ```
 Morning loop done. Drafted {n}, you shipped {s}, {m} decisions on your plate, {k} meetings today.
 Top of your list: {the single most important your-turn / decision item}.

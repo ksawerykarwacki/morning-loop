@@ -1,6 +1,6 @@
 # Morning loop: v2 → v3
 
-> **Looking for the overview to share with the team? Read `V2-TO-V3.1.md`.** This file is the per-release detail.
+> **Looking for the overview to share with the team? Read `docs/history/V2-TO-V3.1.md`.** This file is the per-release detail.
 
 
 **Written 2026-08-21.** Every row below traces to something that actually happened, either in the run log or in a squad member's report-back on KM-14119. Nothing here is a good idea somebody had; if a change has no evidence column, it should not be in the release.

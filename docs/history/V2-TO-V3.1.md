@@ -1,6 +1,6 @@
 # Morning loop: v2 → v3.1
 
-**The one document to read.** `V3-WHATS-NEW.md` and `V3-1-WHATS-NEW.md` are the per-release detail; this is the whole arc in one place.
+**The one document to read.** `docs/history/V3-WHATS-NEW.md` and `docs/history/V3-1-WHATS-NEW.md` are the per-release detail; this is the whole arc in one place.
 
 Updated 2026-08-21.
 
@@ -18,7 +18,7 @@ Updated 2026-08-21.
 | Sensing | One long chain; the tail got dropped | Parallel probes, each quoting its evidence verbatim |
 | A skill your config names but cannot load | Silent. Fired, found nothing, said nothing | Caught before the run, named, and the rule disabled |
 | Installing it | Copy files and find out over a week | `install-skills.sh` then `doctor.py`, both of which verify themselves |
-| Something you built | Stayed on your machine | `CONTRIBUTING.md` + `adoption-log.md` |
+| Something you built | Stayed on your machine | `CONTRIBUTING.md` + `docs/history/adoption-log.md` |
 
 **Why it kept not working for you was one packaging bug.** Skills load from exactly two places and the package shipped them somewhere else, so a config could name a skill that could not possibly resolve and nothing checked. That is the whole of *"aren't installed in my environment"*, *"I cannot review them at all"* and *"nothing in the flow catches this"*.
 
@@ -114,7 +114,7 @@ On its first run the fan-out reconciled that ledger for the first time in **14 d
 | The notifier picks the wrong top item | Maria | Fixed, and it was two bugs |
 | Auto-run local-only drafts at prep time | Xitong | **Shipped as the core of v3**; his sharper version is the next candidate |
 | A dev drafter that actually exists | Daniel Zhu, Xitong, David | **Packaging fixed**, so the ones that shipped now load. Xitong's own is a contribution candidate |
-| Somewhere to put the tools I built | Andres | `CONTRIBUTING.md` and `adoption-log.md` |
+| Somewhere to put the tools I built | Andres | `CONTRIBUTING.md` and `docs/history/adoption-log.md` |
 
 ---
 

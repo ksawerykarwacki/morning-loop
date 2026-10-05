@@ -124,6 +124,13 @@ def pairs(ws: pathlib.Path, home: pathlib.Path, client: str, repo_scope: bool) -
         for src in sorted((PKG / "scripts").iterdir()):
             if src.is_file() and (src.suffix in (".py", ".md", ".sh", ".ps1") or src.name.endswith(".template")):
                 out.append(("script", src, scripts / src.name))
+    roles = ws / "05-automation/agent-manager/roles"
+    share = ws / "05-automation/agent-manager/morning-loop-share"
+    if not roles.is_symlink() and not (share.is_symlink() or (share / "roles").is_dir()):
+        # /morning looks for the role presets here when the package is not linked in
+        for src in sorted((PKG / "roles").iterdir()):
+            if src.is_file():
+                out.append(("role", src, roles / src.name))
     rub = rubrics_dir(ws)
     if rub and rub.is_dir() and not rub.is_symlink():
         for src in sorted((PKG / "rubrics").glob("*.yml")):
@@ -185,14 +192,36 @@ def block_text(text: str, name: str) -> str:
     return "\n".join(lines[start:end])
 
 
+ROLE_HINTS = (("engineer", ("engineer", "developer", "backend", "frontend", "full-stack", "fullstack", "mobile", "dev")),
+              ("scrum-master", ("scrum", "delivery lead", "agile coach")),
+              ("designer", ("design",)),
+              ("community-manager", ("community",)),
+              ("data-analyst", ("analyst", "data")),
+              ("supporter", ("support",)),
+              ("product-owner", ("product", "po", "pm")))
+
+
+def guess_role(cfg_text: str) -> str | None:
+    m = re.search(r"^\s+role:\s*(.+?)\s*(#.*)?$", cfg_text, re.M)
+    title = (m.group(1) if m else "").strip().strip('"').lower()
+    if not title or title.startswith("<"):
+        return None
+    for preset, words in ROLE_HINTS:
+        if any(re.search(rf"\b{re.escape(w)}", title) for w in words):
+            return preset
+    return None
+
+
 def config_plan(cfg: pathlib.Path | None) -> dict:
     tpl = (PKG / "agent-manager-config.template.yml").read_text()
     if not cfg or not cfg.is_file():
         return {"config": None, "missing": [], "note": "no config found: setup-workspace.sh copies a starter"}
-    have = set(top_blocks(cfg.read_text(errors="replace")))
+    ctext = cfg.read_text(errors="replace")
+    have = set(top_blocks(ctext))
     missing = [b for b in top_blocks(tpl) if b not in have]
+    has_role = bool(re.search(r"^\s+role_profile:\s*[a-z]", ctext, re.M))
     return {"config": cfg, "missing": missing, "suggest": cfg.with_name(cfg.stem + ".v4-additions.yml"),
-            "text": tpl}
+            "text": tpl, "role_missing": not has_role, "role_guess": None if has_role else guess_role(ctext)}
 
 
 V4_RUNNER_MARKERS = ("--if-missing", "LOCKDIR", "NET_HOST")
@@ -327,6 +356,11 @@ def main() -> int:
     print("\nconfig")
     if cfgp.get("config"):
         print(f"  {cfgp['config']}  (never edited)")
+        if cfgp.get("role_missing"):
+            g = cfgp.get("role_guess")
+            print("  no owner.role_profile yet, so the brief stays shaped for a product owner."
+                  + (f" Your role reads like `{g}`." if g else ""))
+            print("  -> add `role_profile: <preset>` under owner: (roles/README.md lists them)")
         if cfgp["missing"]:
             print(f"  v4 blocks it does not have yet: {', '.join(cfgp['missing'])}")
             print(f"  -> suggestions written to {cfgp['suggest'].name}; paste the ones you want.")
@@ -373,9 +407,14 @@ def main() -> int:
         d.write_text(body)
         if s.stat().st_mode & 0o111:
             d.chmod(d.stat().st_mode | 0o111)
-    if cfgp.get("missing"):
+    if cfgp.get("missing") or cfgp.get("role_missing"):
         parts = [f"# v4 blocks your config does not have yet, generated {stamp}.",
                  "# Your config was NOT edited. Copy the blocks you want into it.", ""]
+        if cfgp.get("role_missing"):
+            parts += ["# NEW IN v4: add this line inside your existing `owner:` block. It shapes what the",
+                      "# brief leads with for your role. Presets: roles/README.md",
+                      f"#   role_profile: {cfgp.get('role_guess') or '<product-owner | engineer | scrum-master | designer | community-manager | data-analyst | supporter>'}",
+                      ""]
         parts += [block_text(cfgp["text"], b) + "\n" for b in cfgp["missing"]]
         cfgp["suggest"].write_text("\n".join(parts))
         added.append(str(cfgp["suggest"]))

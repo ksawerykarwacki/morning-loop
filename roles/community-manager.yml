@@ -1,0 +1,19 @@
+role: community-manager
+title: Community Manager
+lens:
+  leads_with: "launches that need a communication decision, community threads waiting for you, and product changes users will ask about"
+  top_of_list: "the launch or community issue where silence costs the most trust today"
+  voice: "audience-first: who is affected, what they will notice, what to say"
+sections:
+  on: [state_of_world, top_of_list, solve, ask, decisions, your_turn, chat, inbox, coaching, findings]
+  off: [season_funnel, pulse, worth_sharpening, okr_progress]
+senses:
+  first: [chat, jira_board, inbox, meetings]
+  scope: "communication-decision tickets, launches with a date, and community channels"
+routing:
+  - {id: daily_spine, signal: daily, job: "Launches, comms decisions and community threads", skill: team-standup, bucket: auto, external_action: none}
+  - {id: comms_draft, signal: jira_state, job: "Channel-ready drafts for an announced change", skill: stakeholder-comms, bucket: draft, external_action: none}
+  - {id: meeting_debrief, signal: transcript_new, job: "Meetings into comms actions", skill: meeting-debrief, bucket: draft, external_action: none}
+  - {id: routine_health, signal: daily, job: "Did yesterday's and today's brief land?", skill: null, bucket: decision, external_action: none}
+gaps:
+  - "forum post and FAQ drafts in your house voice (needs your own goldens before it can be graded)"

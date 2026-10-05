@@ -505,7 +505,7 @@ try {
     }
 
     # -----------------------------------------------------------------------------------------
-    # DELIVERY SAFETY NET (RUN-AND-NOTIFY.md). Phase 2b should deliver the brief itself; this
+    # DELIVERY SAFETY NET (docs/RUN-AND-NOTIFY.md). Phase 2b should deliver the brief itself; this
     # block does not trust that. If today has no delivered receipt, deliver here. Idempotent:
     # notify.py reuses today's brief id, so a brief is never delivered twice.
     #

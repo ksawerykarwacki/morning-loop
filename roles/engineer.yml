@@ -1,0 +1,21 @@
+role: engineer
+title: Engineer / Developer
+lens:
+  leads_with: "your tickets: what is assigned to you, waiting on your review, or blocked, and what the sprint goal needs from you today"
+  top_of_list: "the one ticket or review that unblocks the sprint goal or a teammate soonest"
+  voice: "ticket-first and short: key-free names, the state, the next action"
+sections:
+  on: [state_of_world, top_of_list, solve, ask, decisions, your_turn, chat, coaching, findings]
+  off: [season_funnel, pulse, worth_sharpening, growth_circle, okr_progress]
+senses:
+  first: [jira_board, chat, meetings]
+  scope: "tickets assigned to you or in your review queue first, then the rest of the squad board"
+routing:
+  - {id: daily_spine, signal: daily, job: "Your tickets, reviews and blockers for standup", skill: team-standup, bucket: auto, external_action: none}
+  - {id: ticket_brief, signal: jira_state, job: "Kickoff brief when a ticket of yours goes In Progress", skill: ticket-brief, bucket: draft, external_action: none}
+  - {id: ticket_quality_check, signal: jira_state, job: "Is the next ticket ready to build? Before refinement", skill: ticket-quality-check, bucket: draft, external_action: none}
+  - {id: stall_escalation, signal: jira_state, job: "A ticket of yours stuck in review or blocked: name the next action", skill: stall-escalation, bucket: draft, external_action: none}
+  - {id: routine_health, signal: daily, job: "Did yesterday's and today's brief land?", skill: null, bucket: decision, external_action: none}
+gaps:
+  - "PR and code-review digest (no shipped skill: wire in your own, see CONTRIBUTING.md)"
+  - "release notes from merged work"

@@ -37,6 +37,7 @@ PKG = pathlib.Path(__file__).resolve().parent.parent
 FOLDERS = ("01-sprint-operations/current/agent-drafts", "05-automation/agent-manager/delivery-receipts",
            "05-automation/agent-manager/coach", "06-skills/skills", "10-meeting-notes")
 LINKS = (("05-automation/agent-manager/scripts", "scripts"),
+         ("05-automation/agent-manager/roles", "roles"),
          ("05-automation/agent-manager/morning-loop-share", "."),
          ("05-automation/agent-manager/rubrics", "rubrics"))
 
@@ -47,6 +48,7 @@ def main() -> int:
     ap.add_argument("name", nargs="?", default=None)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--copy", action="store_true", help="copy the package in instead of linking it")
+    ap.add_argument("--role", help="a preset from roles/ (see roles/README.md): shapes the starter config")
     a = ap.parse_args()
 
     who = (a.name or os.environ.get("USER") or os.environ.get("USERNAME") or getpass.getuser() or "me").lower()
@@ -62,6 +64,10 @@ def main() -> int:
     print("morning loop · workspace setup")
     say(f"package:   {PKG}")
     say(f"workspace: {ws}")
+    if a.role and not (PKG / "roles" / f"{a.role}.yml").is_file():
+        print(f"✗ no preset named {a.role}. Choose one of: "
+              + ", ".join(sorted(p.stem for p in (PKG / "roles").glob("*.yml"))))
+        return 2
     if ws == PKG:
         print("✗ the workspace cannot be the package clone itself. Pick another folder.")
         return 2
@@ -110,6 +116,8 @@ def main() -> int:
             text = (PKG / src_rel).read_text(encoding="utf-8")
             # The reconciler refuses a ledger with no date marker, so stamp today on a fresh one.
             text = text.replace("`last_reconciled: never`", f"`last_reconciled: {dt.date.today().isoformat()}`")
+            if src_rel == "agent-manager-config.template.yml" and a.role:
+                text = apply_role(text, a.role)
             at.write_text(text, encoding="utf-8")
         say(f"+ {at_rel}")
     log = ws / "05-automation/agent-manager/run-log.md"
@@ -132,6 +140,33 @@ def main() -> int:
     if dry:
         print("\nDry run finished. Nothing was written.")
     return 0
+
+
+def apply_role(text: str, role: str) -> str:
+    """Starter config shaped by a role preset: role_profile set, routing replaced by
+    the preset's rules (all of which ship), and the preset's gaps listed as comments
+    so the config never claims coverage it does not have. Plain text edits on the
+    template, so no YAML library is needed and every comment in it survives."""
+    import re
+    preset = (PKG / "roles" / f"{role}.yml").read_text(encoding="utf-8")
+    text = re.sub(r"^(  role_profile:).*$", rf"\1 {role}   # roles/{role}.yml", text, count=1, flags=re.M)
+    m = re.search(r"^title:\s*(.+)$", preset, re.M)
+    if m:
+        text = re.sub(r"^(  role:) <[^>]*>.*$", rf"\1 {m.group(1).strip()}   # FILL: your exact title", text, count=1, flags=re.M)
+    rules = re.findall(r"^  - \{(.+)\}\s*$", preset[preset.index("\nrouting:"):preset.index("\ngaps:")], re.M)
+    gaps = re.findall(r'^  - "(.+)"\s*$', preset[preset.index("\ngaps:"):], re.M)
+    out = [f"routing:   # from roles/{role}.yml. Yours to change: /jtbd-capture tunes it to your real jobs"]
+    for r in rules:
+        fields = [f.strip() for f in r.split(", ")]
+        out.append("  - " + fields[0])
+        out += ["    " + f for f in fields[1:]]
+        out.append("")
+    if gaps:
+        out.append("  # GAPS for this role: jobs no shipped skill drafts yet. Commented on purpose.")
+        out += [f"  # - {g}" for g in gaps]
+    start = text.index("\nrouting:\n") + 1
+    end = text.index("\n# ----", start)
+    return text[:start] + "\n".join(out).rstrip() + "\n" + text[end:]
 
 
 def can_link(ws: pathlib.Path) -> bool:

@@ -2,7 +2,7 @@
 
 v1 asked you to remember to run it. v2 arrives on its own.
 
-Everything below came out of the KM-13612 adoption round: 7 people, ~40 logged runs, and a set of findings that were sitting in personal repos and Jira comments where nobody else could use them. This file is the fold-back. Statuses in `MODIFICATIONS.md` are updated to match.
+Everything below came out of the KM-13612 adoption round: 7 people, ~40 logged runs, and a set of findings that were sitting in personal repos and Jira comments where nobody else could use them. This file is the fold-back. Statuses in `docs/history/MODIFICATIONS.md` are updated to match.
 
 ---
 
@@ -123,7 +123,7 @@ These gaps are the input to v3.
 
 ## Upgrading from v1
 
-1. Pull the package. Read this file and `RUN-AND-NOTIFY.md`.
+1. Pull the package. Read this file and `docs/RUN-AND-NOTIFY.md`.
 2. Add the four new blocks to your config: `schedule`, `delivery`, `notify`, `health`. Fill every `<PLACEHOLDER>`.
 3. Add `owner.timezone` and `owner.jira_boards`.
 4. Add the `routine_health` and `ceremony_capture` routing rules.

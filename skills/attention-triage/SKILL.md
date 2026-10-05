@@ -5,7 +5,7 @@ description: Triage the Outlook inbox, including the Jira and Confluence notific
 
 # Attention Triage — skill
 
-Triage the notification firehose (Outlook + the Jira/Confluence notifications inside it) into one comprehension-first digest, ranked by OKR relevance. Full design and rationale: `ATTENTION-TRIAGE.md`. This file is the runnable procedure.
+Triage the notification firehose (Outlook + the Jira/Confluence notifications inside it) into one comprehension-first digest, ranked by OKR relevance. Full design and rationale: `docs/ATTENTION-TRIAGE.md`. This file is the runnable procedure.
 
 **Run it** standalone (`/attention-triage`) or let `/morning` dispatch the `attention_triage` routing rule. Config lives in `agent-manager-config.yml` under `attention_triage:`.
 
@@ -63,7 +63,7 @@ Write it in this order (the order enforces comprehension):
 5. **🔇 Noise** — grouped counts, each expandable.
 6. **Calibration** — invite corrections: "anything mis-bucketed?" A correction re-ranks and is written to the triage log so it tunes to your judgment.
 
-Use the layout in `ATTENTION-TRIAGE.md` ("The digest format").
+Use the layout in `docs/ATTENTION-TRIAGE.md` ("The digest format").
 
 ### Step 6 — LOG (audit trail for situational awareness)
 Append to `attention_triage.triage_log`: date, counts per bucket, and every item's `{kind, source ref, KR match, bucket, why}`. This is how awareness persists across days and how precision is measured during the pilot. Note any degraded source.

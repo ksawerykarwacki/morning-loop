@@ -1,6 +1,6 @@
 # Morning loop v3.1 — adopt it to your role, and contribute back
 
-> **Looking for the overview to share with the team? Read `V2-TO-V3.1.md`.** This file is the per-release detail.
+> **Looking for the overview to share with the team? Read `docs/history/V2-TO-V3.1.md`.** This file is the per-release detail.
 
 
 **2026-08-21.** v3.1 is a small release with one large finding behind it.
@@ -25,7 +25,7 @@ v3.1 is the catch.
 | 4 | **The loop runs the doctor in Phase 0** and disables unresolvable rules by name | Your config stops describing coverage you do not have | Silent no-ops |
 | 5 | **Role-adaptive onboarding**, five steps in `ADOPT-MORNING.md`: install, validate, infer your role, wire your jobs, read the coverage report | v3 asked you to fill in a config by hand and find out over a week what did not work | A week of discovering nothing ran |
 | 6 | **Your existing personal tools are first-class** in the config | Three people built role-specific drafters that work and cannot travel | The real coverage gap |
-| 7 | **`CONTRIBUTING.md` and `adoption-log.md`** | The playbook records authorship: ~70 entries, all "added by {self}", **no field for who else used it** | The reusability KR has nowhere to record the only thing it measures |
+| 7 | **`CONTRIBUTING.md` and `docs/history/adoption-log.md`** | The playbook records authorship: ~70 entries, all "added by {self}", **no field for who else used it** | The reusability KR has nowhere to record the only thing it measures |
 | 8 | **Per-item verify in pre-drafting**, plus shortest-job-first ordering | Run #30 wrote 5 drafts then hit the watchdog. **None was graded and the brief still said `drafting…`**, because verification was batched behind the last draft | A kill costing one item instead of five |
 | 9 | **Watchdog kills are reported**, with counts | A kill mid-drafting was completely silent: the brief had landed, so the runner said "already delivered, nothing to do" | The loop's own rule: a silent failure is worse than no automation |
 | 10 | **Health check reports planned vs written vs verified** (`6 planned · 5 written · 0 verified`) | Run #30 lost a planned item and nobody knew until the files were counted by hand | Invisible gaps |

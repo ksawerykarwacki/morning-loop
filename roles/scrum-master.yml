@@ -1,0 +1,22 @@
+role: scrum-master
+title: Scrum Master / Delivery Lead
+lens:
+  leads_with: "sprint health: the goal at risk, stalled tickets, missing estimates, and today's ceremony"
+  top_of_list: "the impediment that, if cleared today, protects the sprint goal most"
+  voice: "board-first: what is stuck, for how long, who can move it"
+sections:
+  on: [state_of_world, top_of_list, solve, ask, decisions, your_turn, chat, inbox, coaching, findings]
+  off: [season_funnel, pulse, worth_sharpening, growth_circle]
+senses:
+  first: [jira_board, meetings, chat]
+  scope: "the whole squad board; ceremony pages you own"
+routing:
+  - {id: daily_spine, signal: daily, job: "Sprint health before standup", skill: team-standup, bucket: auto, external_action: none}
+  - {id: sprint_report, signal: calendar, job: "Sprint report for review", skill: sprint-reporting, bucket: draft, external_action: confluence}
+  - {id: sprint_plan, signal: sprint_event, when: start, job: "Planning prep: capacity and carryover", skill: sprint-plan, bucket: draft, external_action: none}
+  - {id: stall_escalation, signal: jira_state, job: "Stalled tickets turned into named next actions", skill: stall-escalation, bucket: draft, external_action: none}
+  - {id: backlog_health, signal: calendar, job: "Refinement agenda", skill: backlog-analysis, bucket: draft, external_action: none}
+  - {id: meeting_debrief, signal: transcript_new, job: "Ceremony notes into decisions and actions", skill: meeting-debrief, bucket: draft, external_action: confluence}
+  - {id: routine_health, signal: daily, job: "Did yesterday's and today's brief land?", skill: null, bucket: decision, external_action: none}
+gaps:
+  - "retro board synthesis (the PO workspace has a retro skill; not packaged yet)"

@@ -1,0 +1,20 @@
+role: designer
+title: Product Designer
+lens:
+  leads_with: "design work the sprint needs from you, open feedback on your designs, and handoffs engineers are waiting on"
+  top_of_list: "the design decision or handoff that is blocking a build or a refinement soonest"
+  voice: "decision and feedback first: what was asked, by whom, by when"
+sections:
+  on: [state_of_world, top_of_list, solve, ask, decisions, your_turn, chat, coaching, findings]
+  off: [season_funnel, pulse, worth_sharpening, growth_circle, okr_progress]
+senses:
+  first: [jira_board, chat, meetings]
+  scope: "tickets in design states or assigned to you, and threads that mention you"
+routing:
+  - {id: daily_spine, signal: daily, job: "Your design tickets, feedback and handoffs", skill: team-standup, bucket: auto, external_action: none}
+  - {id: meeting_debrief, signal: transcript_new, job: "Design reviews into decisions and follow-ups", skill: meeting-debrief, bucket: draft, external_action: none}
+  - {id: ticket_quality_check, signal: jira_state, job: "Is a design ticket ready to hand off?", skill: ticket-quality-check, bucket: draft, external_action: none}
+  - {id: routine_health, signal: daily, job: "Did yesterday's and today's brief land?", skill: null, bucket: decision, external_action: none}
+gaps:
+  - "Figma comment digest (needs the Figma MCP and a skill of your own)"
+  - "design decision log entries"

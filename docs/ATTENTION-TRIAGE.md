@@ -128,7 +128,7 @@ Same contract as the rest of the loop, no loosening:
 1. **Week 1 — classify only.** No drafts, no sends. Each morning the digest just buckets your inbox with WHAT/WHY/HOW. You spot-check its bucketing against what you'd have done by hand. Goal: measure precision (how often "read yourself" and "noise" are right) *before* trusting it to draft anything.
 2. **Correct as you go.** Every mis-bucket you fix trains the ranker and sharpens the OKR yardstick.
 3. **Week 2 — turn on Draft ready**, still gated per item. Now measure how many drafts you approve without a rewrite (the same ready-without-edit signal the loop already tracks).
-4. **Only then** consider letting it run as part of the scheduled pre-run (delivered to email per `RUN-AND-NOTIFY.md`), so the digest is waiting when you open your inbox.
+4. **Only then** consider letting it run as part of the scheduled pre-run (delivered to email per `docs/RUN-AND-NOTIFY.md`), so the digest is waiting when you open your inbox.
 5. If it ever starts feeling like autopilot, that's a bug against the one hard rule — stop and fix the comprehension, don't push through.
 
 ---

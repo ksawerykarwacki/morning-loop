@@ -15,6 +15,7 @@
 owner:
   name: <YOUR NAME>
   role: <YOUR ROLE e.g. Product Owner / Designer / Engineer>
+  role_profile: <product-owner | engineer | scrum-master | designer | community-manager | data-analyst | supporter>   # FILL: roles/README.md. Shapes what the brief leads with
   squad: <YOUR SQUAD>
   jira_cloud_id: 54c58828-ac60-4b04-acd4-9cb19aaea61e   # same Kaufmich cloud id for all of us
   jira_project: KM
@@ -144,7 +145,7 @@ routing:
 # ---------------------------------------------------------------------------
 # RUN -> DELIVER -> NOTIFY -> HEALTH — the four-part contract that makes the loop
 # PROACTIVE. Without this the loop only runs when you remember to run it, and a
-# plan file on a powered-off laptop helps nobody. Read RUN-AND-NOTIFY.md.
+# plan file on a powered-off laptop helps nobody. Read docs/RUN-AND-NOTIFY.md.
 # This is the single biggest change in v2 and the one every adopter should set up.
 # ---------------------------------------------------------------------------
 schedule:
@@ -168,7 +169,7 @@ delivery:
   channel: macos                    # macos | mattermost | file
   # macos       native notification + the brief opens as a local web page.
   #             Zero setup. Works offline. Start here. (Windows adopters: see
-  #             the Windows note in RUN-AND-NOTIFY.md.)
+  #             the Windows note in docs/RUN-AND-NOTIFY.md.)
   # mattermost  ONE webhook URL pasted below. No account, no 2FA, no MCP, and we
   #             all already live in Mattermost. This is the team-visible option.
   # file        render the HTML and nothing else.

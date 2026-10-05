@@ -15,6 +15,7 @@
 owner:
   name: <YOUR NAME>                    # FILL
   role: <Backend | Frontend | Full-stack | Mobile>   # FILL
+  role_profile: engineer
   squad: E CRM
   jira_cloud_id: 54c58828-ac60-4b04-acd4-9cb19aaea61e
   jira_project: KM

@@ -4,10 +4,25 @@
 
 **Your brief is made on your computer, so it arrives when your computer is on.** There is no server. The loop runs on your laptop at 07:52 on weekdays, and if the laptop is closed or asleep then, it runs the first time you open it that morning (any time before 12:00). On the PO loop that means the brief is usually there shortly after the laptop is opened, around 8. A laptop that stays shut all morning gets no brief that day, and the loop says so the next time it runs.
 
-`V3-TO-V4.md` is the full proposal list with the evidence behind each row. This page only claims what is actually in this release.
+`docs/history/V3-TO-V4.md` is the full proposal list with the evidence behind each row. This page only claims what is actually in this release.
+
+## v3.1 and v4 side by side
+
+| | v3.1 | v4 |
+|---|---|---|
+| Getting the brief | one 07:52 run; missed if the laptop slept | 07:52 run plus a catch-up until a brief exists, whenever the computer is on |
+| Who it's shaped for | a product owner | your role: 7 presets (PO, engineer, scrum master, designer, CM, analyst, support) |
+| Upgrading | the installer overwrote changed skills (after a backup) | `upgrade.py` keeps your changes, upgrades stock copies, one-step undo |
+| Help from Claude | none | `CLAUDE.md` / `AGENTS.md` tell your assistant how to upgrade safely |
+| Trusting the brief | prose | every claim marked verified, reported, inferred or carried |
+| Meeting actions | prose in a debrief | one file, tick to approve, nothing sent without your yes |
+| Windows, OpenCode | partial runners | the same catch-up, lock and watchdog as the Mac (Windows not yet run on real hardware) |
+| Setup | fill a config by hand | `setup_workspace.py --role <preset>` builds folders and a starter config |
 
 ## What you get
 
+- **A brief shaped to your role.** Set `owner.role_profile` (or pass `--role` to `setup_workspace.py`) to one of seven presets in `roles/`: product owner, engineer, scrum master, designer, community manager, data analyst, supporter. The preset decides what the brief leads with, what "top of your list" means for you, which sections are noise for your role and stay off, and which shipped drafters fit your jobs. Jobs a role has but no shipped skill can draft are listed as gaps rather than faked. After a week, `/jtbd-capture` tunes routing to the jobs you really do.
+- **Let your own Claude do the upgrade.** Open this repo in Claude Code (or OpenCode) and ask it to upgrade your setup. `CLAUDE.md` (and `AGENTS.md` for OpenCode) tell it how: dry run first, nothing applied without your yes, your config and runner never edited without you, `.v4-new` files merged with you rather than over you, and the undo command offered if anything breaks.
 - **The brief makes itself, whenever your computer is on.** Two scheduled jobs instead of one: the 07:52 run, plus a catch-up that checks every 15 minutes and at login. If no brief has landed yet on a weekday morning (07:45 to 12:00), it runs. So the first time you open your laptop, the brief gets made, without you typing anything. A lock stops two runs, or a run and your own `/morning`, from ever overlapping.
 - **Runs that survive a sleeping laptop.** The runner waits for the network before starting, holds the machine awake while it works, and its watchdog counts awake time only. A run that freezes with the lid closed reports "slept", not "timeout", and a run that never got online reports "no network", each with the fix.
 - **A safety net on delivery.** If the run writes a brief but never delivers it, the runner delivers it. If drafts land after the brief was sent, the runner appends a list of them and re-delivers.
@@ -27,7 +42,7 @@
 ```bash
 git clone <this repo> ~/Projects/morning-loop && cd ~/Projects/morning-loop
 ./scripts/install-skills.sh                              # skills, commands, agents
-./scripts/setup-workspace.sh ~/work/my-workspace <you>   # folders, links, starter config
+python3 scripts/setup_workspace.py ~/work/my-workspace <you> --role <preset>   # folders, links, starter config for your role
 cd ~/work/my-workspace
 export MORNING_CONFIG="$PWD/06-skills/skills/agent-manager-config.<you>.yml"
 python3 05-automation/agent-manager/scripts/doctor.py    # fix until it says ✓
@@ -65,7 +80,7 @@ python3 scripts/upgrade.py --workspace ~/work/my-workspace --apply    # do it
 - **Headless login can expire.** If the runner's alert says "Claude login expired", run `claude` once interactively and log in. A permanent fix (`claude setup-token` as a required step) is planned, not shipped.
 - **The `file` delivery channel never counts as delivered,** so the catch-up keeps retrying until noon. Use `macos` or `mattermost`.
 - **Mac, Windows and OpenCode all have v4 runners, tested to different depths.** Mac: the full runner end to end. OpenCode: the full runner end to end on a Mac with a stand-in for the `opencode` binary, including lock, catch-up, network failure, watchdog and a simulated sleep; real OpenCode login-error wording is still unverified. Windows: both PowerShell scripts parse cleanly and the runner ran end to end under PowerShell 7 on a Mac with 30 logic checks, but nothing has run on a real Windows machine yet: not Task Scheduler registration, not PowerShell 5.1, not sleep and wake. **Before Windows teammates rely on it, one of them should do a supervised run and register the tasks.** On Windows use `setup_workspace.py` and `upgrade.py`, because the `.sh` scripts need zsh.
-- **Deferred from `V3-TO-V4.md`:** cloud routine as the default deliverer (A1), the required setup-token step (A5), personal rubric overlays and calibration targets (C1, C2), `rules.local.yml` (E2), and the per-skill trust ladder (F).
+- **Deferred from `docs/history/V3-TO-V4.md`:** cloud routine as the default deliverer (A1), the required setup-token step (A5), personal rubric overlays and calibration targets (C1, C2), `rules.local.yml` (E2), and the per-skill trust ladder (F).
 
 ## Bugs the fresh-install test found, all fixed here
 
@@ -81,6 +96,7 @@ python3 scripts/upgrade.py --workspace ~/work/my-workspace --apply    # do it
 10. A workspace whose scripts were copies, not links, got none of a new version. `upgrade.py` upgrades the stock copies and adds what's missing.
 11. The notification led with the first question instead of the brief's own top item, and counted skipped drafts as drafts (2 became 5). Both fixed, checked against five real briefs.
 12. The Windows and OpenCode runners had none of the v4 catch-up, lock, network wait or on-time record. Both are now at parity with the Mac runner, and Windows registers two tasks.
-13. Workspace setup was zsh-only, so Windows users could not run it. It is Python now, linking where the system allows and copying where it does not.
-14. A `file`-channel day was always scored "missed" (the receipt had no time), and the Mac catch-up re-ran the whole brief every 15 minutes for file-channel users. Both fixed.
-15. The team runner template lacked the catch-up guard, the lock and the network gate. It now matches the runner the PO loop actually uses, plus a catch-up launchd template.
+13. The brief and the starter config assumed a product owner. `/morning` now reads a role preset, and about 40 lines that named the original author, their Jira board or their squad's ceremonies are now generic.
+14. Workspace setup was zsh-only, so Windows users could not run it. It is Python now, linking where the system allows and copying where it does not.
+15. A `file`-channel day was always scored "missed" (the receipt had no time), and the Mac catch-up re-ran the whole brief every 15 minutes for file-channel users. Both fixed.
+16. The team runner template lacked the catch-up guard, the lock and the network gate. It now matches the runner the PO loop actually uses, plus a catch-up launchd template.

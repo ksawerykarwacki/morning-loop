@@ -8,7 +8,7 @@ A browsable catalog of changes squad members have made to their own morning loop
 
 - **Browsing yourself:** skim the table below, then read the cards for the ones marked "applies to" your role/client.
 - **Handing it to your agent:** paste this into your morning-loop repo and say:
-  > "Read `MODIFICATIONS.md`. I'm a `<role>` on `<Claude Code / Cursor / OpenCode>`, `<macOS / Windows>`. List the mods that apply to me, ranked by benefit, and for each tell me whether it's config-only or needs a file change. Then help me adopt the ones I pick."
+  > "Read `docs/history/MODIFICATIONS.md`. I'm a `<role>` on `<Claude Code / Cursor / OpenCode>`, `<macOS / Windows>`. List the mods that apply to me, ranked by benefit, and for each tell me whether it's config-only or needs a file change. Then help me adopt the ones I pick."
 - **Adopting a mod:** each card has a **How to adopt** block. Config-only mods are safe to try immediately. Anything touching the shared `/morning` command should stay a personal override until it's folded into the package (see the last section).
 
 ## The menu
@@ -85,8 +85,8 @@ Each mod follows the same shape so it stays scannable and machine-parseable.
 - **Author:** Chris Gamrot · **Client/OS:** any (runs in the cloud)
 - **What:** the loop set up as a Claude Code cloud routine (Atlassian MCP, read-only, KM-scoped) on a weekday cron, delivering its output and a push notification instead of relying on a local scheduler.
 - **Why:** the local scheduler only fires when the laptop is on and VPN is up, which is why every adopter is stuck at "Assisted." The cloud routine survives the laptop being off, so it actually runs without you remembering.
-- **Type:** scheduling · **Applies to:** all · **Status:** ✅ in the package as `schedule.backstop: cloud_routine` in the config template. See `RUN-AND-NOTIFY.md` for the standard built from this.
-- **How to adopt now:** follow `RUN-AND-NOTIFY.md`. Caveat: a cloud routine can't read the Lab-GitLab package files, so the loop logic has to live somewhere cloud-reachable (that's the open structural fix).
+- **Type:** scheduling · **Applies to:** all · **Status:** ✅ in the package as `schedule.backstop: cloud_routine` in the config template. See `docs/RUN-AND-NOTIFY.md` for the standard built from this.
+- **How to adopt now:** follow `docs/RUN-AND-NOTIFY.md`. Caveat: a cloud routine can't read the Lab-GitLab package files, so the loop logic has to live somewhere cloud-reachable (that's the open structural fix).
 - **Source:** KM-13612 (Chris 2026-07-18).
 
 ### 6. Windows / PowerShell scheduled pre-run
