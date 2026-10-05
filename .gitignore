@@ -28,3 +28,7 @@ com.morning-loop.prep.plist
 scripts/run-prep.ps1
 scripts/register-prep-task.ps1
 taskscheduler*.log
+
+# python bytecode
+__pycache__/
+*.pyc

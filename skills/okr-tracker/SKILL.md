@@ -15,9 +15,9 @@ Generates a structured OKR progress report for the Escort CRM & CAI squad. Reads
 ## Configuration
 
 ```yaml
-workspace: /Users/tomek/Projects/po-workspace
-okr_map: /Users/tomek/Projects/po-workspace/okr-epic-map.md
-progress_log: /Users/tomek/Projects/po-workspace/01-sprint-operations/okr-progress-log.md
+workspace: . (the workspace you run /morning from)
+okr_map: okr-epic-map.md
+progress_log: 01-sprint-operations/okr-progress-log.md
 jira:
   cloudId: koko-app.atlassian.net        # use this directly as cloudId in all Atlassian tool calls
   base_url: https://koko-app.atlassian.net
@@ -46,7 +46,7 @@ Run all three reads before proceeding. These together give the full picture: wha
 
 ### 1a — Load the OKR map
 
-Read `/Users/tomek/Projects/po-workspace/okr-epic-map.md` in full.
+Read `okr-epic-map.md` in full.
 
 Extract for each KR:
 - KR ID and full description
@@ -58,7 +58,7 @@ Do not rely on memory — always re-read the file to catch updates.
 
 ### 1b — Read the sprint report
 
-Read the most recent sprint report at `/Users/tomek/Projects/po-workspace/sprint-reports-[timestamp].md` (use the latest file if multiple exist).
+Read the most recent sprint report at `sprint-reports-[timestamp].md` (use the latest file if multiple exist).
 
 Extract:
 - **Completed tickets** — grouped by epic; cross-reference with KR mappings from 1a to attribute sprint work to KRs
@@ -71,7 +71,7 @@ If the sprint report is not available, ask the user to provide: what was complet
 
 ### 1c — Read the insight brief
 
-Read `/Users/tomek/Projects/po-workspace/insight-brief.md` — output from the data-analysis skill.
+Read `insight-brief.md` — output from the data-analysis skill.
 
 Extract:
 - **Metric movements** tied to any KR (especially KR 2.3 Sian WAU/D30 if data exists, and any feature adoption metrics for sprint deliverables)
@@ -324,7 +324,7 @@ Status badge rules:
 
 ## Output Format A — Squad Review (detailed)
 
-Save to: `/Users/tomek/Projects/po-workspace/okr-progress-report.md` (overwrite)
+Save to: `okr-progress-report.md` (overwrite)
 
 ```markdown
 # OKR Progress Report — [SEASON]
@@ -447,7 +447,7 @@ Print directly to conversation (do not overwrite the squad report file).
 ## Step 6 — Append to progress log
 
 After generating both outputs, append a snapshot to the progress log at:
-`/Users/tomek/Projects/po-workspace/01-sprint-operations/okr-progress-log.md`
+`01-sprint-operations/okr-progress-log.md`
 
 If the file does not exist, create it with a header first.
 

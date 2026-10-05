@@ -29,7 +29,7 @@ So the triage reads **your email inbox** as the primary source, resolves each Ji
 
 ## Sources
 
-1. **Email inbox** (primary) — Jira notification emails, Confluence notification emails, and direct emails. Provider: **Microsoft 365 / Outlook** (`email_provider: microsoft365`), the account on `tomek@ideawisegroup.com`, read via the Microsoft 365 MCP.
+1. **Email inbox** (primary) — Jira notification emails, Confluence notification emails, and direct emails. Provider: **Microsoft 365 / Outlook** (`email_provider: microsoft365`), the account on `your work address`, read via the Microsoft 365 MCP.
 2. **Atlassian MCP** (enrichment) — for each Jira/Confluence notification, pull the real issue/page: status, who changed what, the actual comment or mention, links to your OKRs/epics. This is what lets the WHY be real rather than guessed from a subject line.
 3. **Your OKR source** (the ranker's yardstick) — your current Q3 KRs, machine-readable, via the `okr-tracker` skill / your OKR file. Your lane (acquisition, retention, fluency) is what "important" is scored against. Most inboxes can't be OKR-ranked; yours can, and that's the whole leverage.
 
@@ -145,7 +145,7 @@ Same contract as the rest of the loop, no loosening:
     external_action: none          # replies/acks are never_auto, confirmed individually
 
 attention_triage:
-  email_provider: microsoft365     # Outlook on tomek@ideawisegroup.com, via the Microsoft 365 MCP
+  email_provider: microsoft365     # Outlook on your work address, via the Microsoft 365 MCP
   enrich_via_atlassian: true       # resolve each notification to the real ticket/page
   okr_source: "01-sprint-operations/current/okrs-q3-2026.md"   # the ranker's yardstick
   mode: classify_only              # classify_only (pilot) | with_drafts (week 2+)
@@ -157,7 +157,7 @@ attention_triage:
 ---
 
 ## Settled inputs
-- **Email:** Microsoft 365 / Outlook (`tomek@ideawisegroup.com`), read via the Microsoft 365 MCP.
+- **Email:** Microsoft 365 / Outlook (your work address), read via the Microsoft 365 MCP.
 - **OKR yardstick:** `01-sprint-operations/current/okrs-q3-2026.md` (Q3, machine-readable, with per-KR match hooks).
 
 ## Still open

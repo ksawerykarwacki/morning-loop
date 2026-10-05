@@ -118,7 +118,9 @@ def configure_roots(explicit: str | None = None) -> None:
             print(f"notify: --root does not exist yet, will create under {REPO}",
                   file=sys.stderr)
     else:
-        REPO = find_workspace_root(HERE) or PACKAGE_ROOT
+        # cwd first: the scripts are linked into the workspace, so HERE resolves to
+        # the package clone (v4 fresh-install test, 2026-10-05).
+        REPO = find_workspace_root(pathlib.Path.cwd()) or find_workspace_root(HERE) or PACKAGE_ROOT
     LAYOUT, ARTIFACTS, RENDER_DIR = artefact_paths(REPO)
     INDEX = ARTIFACTS / "brief-index.json"
     RECEIPTS = ARTIFACTS / "delivery-receipts"

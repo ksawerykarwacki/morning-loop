@@ -59,6 +59,7 @@ Probe each MCP the run depends on with its cheapest read, and print a one-line s
 | Microsoft 365 | `get_me` | `attention_triage` cannot run. Say so plainly; it does not affect delivery |
 | Amplitude | `get_amplitude_context` | pulse/metric signals degrade to "not checked", never estimated |
 | Granola / meeting source | the configured `meeting_source` read | `transcript_new` cannot fire; note it |
+| Mattermost (only if `mattermost_triage.enabled`) | `get_team_info` | `mattermost_triage` cannot run. Say so on the MATTERMOST line; it does not affect delivery |
 
 **One command per Bash call.** The unattended sandbox refuses compound commands, `find -exec`, and the project venv. Bare `python3` has no `httpx`, so anything needing it degrades silently to mock data rather than failing loudly.
 
@@ -124,7 +125,8 @@ This is the direct fix for the loop's most repeated defect. Four separate runs m
 | `meetings` | configured `meeting_source` | new transcripts since the last run, **and one file per meeting written to `paths.meeting_notes_dir`** before the probe returns, for meetings this loop owns. **Squad ceremonies are Maria's and are never captured here**, see below | standard |
 | `decision_log` | Confluence, current **and** previous sprint page | decisions since the last run, plus the reverse check: consequential events with no log entry | cheap |
 | `inbox` | Microsoft 365 | `attention_triage` buckets per its config block | cheap |
-| `reading` | Every.to | new items or an explicit "nothing new" | cheap |
+| `mattermost` | Mattermost MCP, **read tools only**, only if `mattermost_triage.enabled` | buckets per the `mattermost_triage` block: mentions since the last run, the watchlist channels since the last run, threads where the owner is owed a reply or promised an action. The MCP exposes no unread state, so never claim "unread". Never call a Mattermost write tool, not even with the morning approval | cheap |
+| `reading` | Every.to, only if `reading.enabled` is not false | new items or an explicit "nothing new" | cheap |
 | ~~`ads`~~ | ExoClick | **off since 2026-09-24**: no ads running there. Do not run it, do not list ExoClick as a degraded source, do not report campaign status. The one exception is the leaked-token rotation in hygiene, which is a security item and stays until it is done. Re-enable only when it is back in `sense.probes` | n/a |
 
 **Meeting capture is scoped, and the scope is a squad agreement, not a technical limit (set 2026-08-20).** Maria runs and records the squad ceremonies: standup, refinement, sprint review, retro and planning. **The loop does not write note files for those**, because a second unofficial record of a ceremony someone else owns creates two sources of truth and the loop's copy is the weaker one. It still *reads* her ceremony pages, which is where the Decision Log gap checks come from.
@@ -250,8 +252,9 @@ For each firing rule, build a **plan item**: `{job, skill, bucket, external_acti
 - {item} · closed, overtaken by {what} · or · parked until {date/trigger}
 
 ## ✅ Already done (read-only, sensed for you)
-- Product pulse: {1-line health}
-- Every.to: {n new / nothing new}
+- Product pulse: {1-line health. If the config lists `okr_kpis.pulse_always_print`, every metric in it is printed every day, each vs the prior 7 days}
+- Season funnel: {only if the config lists `okr_kpis.season_funnel_always_print`: every KPI in that list, every brief, each with its baseline and target from the goals file. Never print the objective alone}
+- Every.to: {n new / nothing new; omit the line when `reading.enabled: false`}
 - Jira sprint: {counts; stale flags}
 - Open commitments: {n carried}
 
@@ -433,7 +436,7 @@ python3 05-automation/agent-manager/scripts/notify.py \
 
 ```
 ☀️ MORNING BRIEF — {DATE}   ({weekday}, sprint {n}/{len}, {phase})
-Window: {lookback} · Sources: {preflight line, degradations named}
+Window: {lookback} · Sources: {preflight line, degradations named. A probe the owner switched off in config is not a degradation; leave it out}
 Confidence: {census line from trust.py claims census, verbatim, e.g. "41 claims: 12 verified
  live, 22 reported, 3 inferred, 4 carried. 2 corrections registered, both cleared."}
 
@@ -462,7 +465,7 @@ Confidence: {census line from trust.py claims census, verbatim, e.g. "41 claims:
 
 ✅ ALREADY DONE (sensed for you)
   - Sprint: {counts; stale flags}   - Pulse: {1-line health}
-  - Commitments: {n carried}        - Meetings captured: {n written to notes}
+  - Commitments: {n carried}        - Meetings: {n notes written} · {n ceremony pages read} · {n action points pulled into meeting-actions}
 
 ── OPEN QUESTIONS ──   ({n} asked, {a} answered since last run, {o} open)
 {EVERY open question printed in full, here, in the brief (Tomek, 2026-09-28: "I don't
@@ -471,11 +474,17 @@ Confidence: {census line from trust.py claims census, verbatim, e.g. "41 claims:
 Answer in {questions file path}. No command, type under **Answer:** and save.
 
 ── INBOX ──   ({k} read yourself, {d} draft-worthy, {f} FYI, {p} noise)
-{EVERY triaged item printed here, in the brief (Tomek, 2026-09-28). READ THIS YOURSELF,
+{EVERY triaged item printed here, in the brief. READ THIS YOURSELF,
  DRAFT-WORTHY and FYI items each get one line of WHAT / WHY / HOW; noise is grouped with
  a count. "Folded into this brief" means the items are HERE, not just their counts. If
  the inbox probe did not run or is not enabled, say so on this line instead of
  omitting the section.}
+
+── MATTERMOST ──   ({r} need your reply, {a} decision or action, {f} FYI, {p} noise)
+{Only when `mattermost_triage.enabled`. Same contract as INBOX: every item printed here, one
+ line of WHAT / WHY / HOW with channel and time, noise grouped with a count. A promise the
+ owner made in a thread ("I'll create the ticket") is an action item and goes to the ledger.
+ If the probe did not run, say so here.}
 
 ── COACHING ──   (one, today only. A different thread tomorrow.
                  ALWAYS rendered: "nothing due, and why" is information, absence is not.)

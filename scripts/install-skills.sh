@@ -244,6 +244,34 @@ else
   echo "  ! no commands/ directory in the package. /morning will not resolve."
 fi
 
+# ---------------------------------------------------------------------------
+# Agents (v4). The verify stage dispatches claim-verifier, disagreement-judge,
+# sense-probe and job-drafter by name. Without them every check falls back to a
+# general agent that can write files, so "read-only by toolset" stops being true.
+# Claude Code only; definitions load at session start, so restart after install.
+# ---------------------------------------------------------------------------
+AGENT_SRC="$PKG/agents"
+if [ "$CLIENT" = "claude" ] && [ -d "$AGENT_SRC" ]; then
+  if [ $REPO_SCOPE -eq 1 ]; then AGENT_TARGET="$REPO_ROOT/.claude/agents"; else AGENT_TARGET="$HOME/.claude/agents"; fi
+  echo
+  echo "agents -> $AGENT_TARGET"
+  for f in "$AGENT_SRC"/*.md; do
+    name="${f:t}"; dest="$AGENT_TARGET/$name"
+    [ "$name" = "README.md" ] && continue
+    if [ -L "$dest" ]; then echo "  = ${name%.md}: symlinked, real target ${dest:A}"; continue; fi
+    if [ -f "$dest" ] && ! cmp -s "$f" "$dest"; then
+      [ $DRY -eq 0 ] && cp "$dest" "$dest.before-v4"
+      echo "  ~ ${name%.md}: differs from yours, backed up to $name.before-v4"
+    elif [ -f "$dest" ]; then
+      echo "  = ${name%.md}: already current"; continue
+    else
+      echo "  + ${name%.md}"
+    fi
+    [ $DRY -eq 0 ] && { mkdir -p "$AGENT_TARGET" && cp "$f" "$dest"; }
+  done
+  echo "  restart Claude Code after installing: agent definitions load at session start"
+fi
+
 if [ $DRY -eq 1 ]; then
   echo; echo "Dry run finished. Re-run without --dry-run to apply."; exit 0
 fi
@@ -254,6 +282,16 @@ DOCTOR="$HERE/doctor.py"
 if [ -f "$DOCTOR" ]; then
   # State the root when we installed with --repo, so the check runs against the
   # root we just wrote into rather than one the doctor resolves separately.
+  # On a first install there is no config yet, and that is the next step, not a
+  # failure: the v4 fresh-install test exited 2 here and read as a broken install.
+  if [ -z "${MORNING_CONFIG:-}" ] && ! ls "$PKG"/agent-manager-config.*.yml 2>/dev/null | grep -qv template \
+       && [ $REPO_SCOPE -eq 0 ]; then
+    echo "✓ installed. No config yet, which is expected on a first install."
+    echo "  Next: ./scripts/setup-workspace.sh <your workspace folder> <your-name>"
+    echo "  It creates the folders the loop writes to, links this package in, copies a"
+    echo "  starter config, and tells you how to run the doctor against it."
+    exit 0
+  fi
   if [ $REPO_SCOPE -eq 1 ]; then
     python3 "$DOCTOR" --client "$CLIENT" --repo-root "$REPO_ROOT"
   else

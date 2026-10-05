@@ -23,7 +23,7 @@ Runs after sprint-reporting (Phase 1) so it can read the sprint data without re-
 
 ## Configuration
 ```yaml
-workspace: /Users/tomek/Projects/po-workspace
+workspace: . (the workspace you run /morning from)
 sprint_report: sprint-reports-[latest-timestamp].md  # read from workspace root
 meeting_notes: 10-meeting-notes/                     # read files from last 7 days
 output_file: ops-update-[YYYYMMDD].md               # workspace root
@@ -106,7 +106,7 @@ Add a one-line header above the two sections:
 
 Save to:
 ```
-/Users/tomek/Projects/po-workspace/02-stakeholder-comms/updates/ops-update-[YYYYMMDD].md
+02-stakeholder-comms/updates/ops-update-[YYYYMMDD].md
 ```
 
 Overwrite if a file for the same date exists. Do not accumulate old ops updates in the same file.
@@ -278,7 +278,7 @@ Maximum 5 "applicable" bullets. If fewer than 3 articles are relevant, still wri
 Append the intelligence brief to the same file saved in Step 5:
 
 ```
-/Users/tomek/Projects/po-workspace/02-stakeholder-comms/updates/ops-update-[YYYYMMDD].md
+02-stakeholder-comms/updates/ops-update-[YYYYMMDD].md
 ```
 
 Append after a clear separator — do not overwrite the Confluence section:

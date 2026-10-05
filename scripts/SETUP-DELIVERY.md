@@ -75,26 +75,49 @@ count toward the day-count criterion.
 This package described the schedule everywhere and never shipped the thing that
 creates it. `scripts/com.morning-loop.prep.plist.template` is that piece.
 
-```sh
-# 1. configure your runner (Claude Code users: run-prep.template.sh)
-cp scripts/run-prep.opencode.template.sh scripts/run-prep.opencode.sh
-$EDITOR scripts/run-prep.opencode.sh          # set WORKDIR to your clone
+Run everything below from the workspace you set up with `scripts/setup-workspace.sh`,
+not from the package clone. The runner, the brief and the receipts all live there.
 
-# 2. fill the plist — absolute paths only, there is no ~ expansion in a plist
-sed -e "s|__RUN_PREP_PATH__|$PWD/scripts/run-prep.opencode.sh|" \
-    -e "s|__LOG_PATH__|$PWD/briefs/launchd.log|" \
-    scripts/com.morning-loop.prep.plist.template > com.morning-loop.prep.plist
-plutil -lint com.morning-loop.prep.plist       # do not proceed unless this says OK
+```sh
+cd <your workspace>
+PKG=05-automation/agent-manager/morning-loop-share   # the link setup-workspace.sh made
+
+# 1. configure your runner (OpenCode users: run-prep.opencode.template.sh)
+sed "s|<PATH TO YOUR WORKSPACE>|$PWD|" $PKG/scripts/run-prep.template.sh \
+    > 05-automation/agent-manager/run-prep.sh
+
+# 2. fill BOTH plists: the 07:52 prep job and the catch-up that retries until a
+#    brief has landed. Absolute paths only, there is no ~ expansion in a plist.
+for job in prep catchup; do
+  sed -e "s|__RUN_PREP_PATH__|$PWD/05-automation/agent-manager/run-prep.sh|" \
+      -e "s|__LOG_PATH__|$PWD/05-automation/agent-manager/launchd.stdout.log|" \
+      $PKG/scripts/com.morning-loop.$job.plist.template > com.morning-loop.$job.plist
+  plutil -lint com.morning-loop.$job.plist     # do not proceed unless this says OK
+done
 
 # 3. do ONE supervised run before handing it to launchd
-zsh scripts/run-prep.opencode.sh; echo "exit $?"
-cat briefs/launchd.log
+zsh 05-automation/agent-manager/run-prep.sh; echo "exit $?"
+tail -20 05-automation/agent-manager/launchd.log
 
-# 4. only then, schedule it
-cp com.morning-loop.prep.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.morning-loop.prep.plist
-launchctl list | grep -i morning               # expect EXACTLY one entry
+# 4. only then, schedule both
+for job in prep catchup; do
+  mv com.morning-loop.$job.plist ~/Library/LaunchAgents/
+  launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.morning-loop.$job.plist
+done
+launchctl list | grep -i morning               # expect EXACTLY two entries: prep and catchup
 ```
+
+**Why two jobs.** The prep job fires at one fixed time, and on a laptop that time
+usually lands in a DarkWake on battery: no keychain, no Wi-Fi, a few seconds awake.
+On the PO loop that alone produced 7 missed mornings in 3 weeks. The catch-up job
+fires every 15 minutes and on login, and `run-prep.sh --if-missing` exits at once
+unless it is a weekday between 07:45 and 12:00 with no brief delivered yet. So the
+first time you genuinely open the laptop, the brief gets made. A lock stops the two
+jobs, or a hand-run `/morning`, from ever running at the same time.
+
+**Use the `macos` or `mattermost` channel with the catch-up.** It stops once the
+receipt says `sent`. The `file` channel never sends, so the catch-up would keep
+retrying until 12:00.
 
 Step 3 is not optional. The first three scheduled runs in this package's own
 history failed for reasons a supervised run would have surfaced in seconds: a
@@ -105,15 +128,16 @@ Four things that bite:
 
 - **`StartCalendarInterval` fires in the machine's local time**, not the timezone
   in your config. If they disagree, the config is the one that is wrong.
-- **Two entries means two runs racing.** If you migrated from an older workspace
-  path, `launchctl bootout` the old label before loading this one.
-- **Keep `caffeinate -i -w $$`.** A launchd wake is a DarkWake, worth roughly 45
+- **More than two entries means runs racing.** If you migrated from an older workspace
+  path or label, `launchctl bootout` the old label before loading these.
+- **Keep the `caffeinate` lines in the runner.** A launchd wake is a DarkWake, worth roughly 45
   seconds before macOS sleeps again and kills the run mid-flight.
 - **The laptop must be on.** launchd is a local substrate; it fires when your
   machine is awake and not otherwise. `routine_health` is mandatory with it,
   because this is exactly the substrate that fails silently.
 
-Remove it with `launchctl bootout gui/$UID/com.morning-loop.prep`.
+Remove them with `launchctl bootout gui/$UID/com.morning-loop.prep` and
+`launchctl bootout gui/$UID/com.morning-loop.catchup`.
 
 **Windows / Linux:** use Task Scheduler or cron against the same runner; the
 delivery safety net and receipts below are platform-independent.

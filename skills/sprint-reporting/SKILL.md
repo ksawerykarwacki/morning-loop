@@ -32,8 +32,8 @@ No manual exports required. Data is pulled live via the Atlassian MCP.
    - Mapped epics: KM-12205, KM-10878, KM-10904, KM-10909, KM-12010, KM-12133
 
 2. **Read Core Context Files**
-   - `/Users/tomek/Projects/po-workspace/00-core/CLAUDE.md` — project configuration
-   - `/Users/tomek/Projects/po-workspace/02-stakeholder-comms/communication-matrix.md` — communication patterns
+   - `00-core/CLAUDE.md` — project configuration
+   - `02-stakeholder-comms/communication-matrix.md` — communication patterns
 
 ## Workflow
 
@@ -198,7 +198,7 @@ One output only: the full Confluence report for the Growth Circle. No Mattermost
 Save to the workspace root:
 
 ```
-/Users/tomek/Projects/po-workspace/sprint-reports-[YYYYMMDD-HHMM].md
+sprint-reports-[YYYYMMDD-HHMM].md
 ```
 
 Include a downstream data summary section at the end (not for posting — for data-analysis and okr-tracker phases):

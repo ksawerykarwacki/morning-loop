@@ -9,6 +9,10 @@
 
 # The Morning Loop — a shareable agent-manager for your day
 
+> **v4 (beta) is here.** Start with [`V4-WHATS-NEW.md`](V4-WHATS-NEW.md): what changed, how to set it up
+> (new: `scripts/setup-workspace.sh`, and a second launchd job so the brief makes itself), what to
+> expect in week 1, and the known issues.
+
 > **You are reading this in the standalone package repo.** Paths in these docs that begin
 > `05-automation/agent-manager/morning-loop-share/` refer to **this repo's root**. So
 > `05-automation/agent-manager/morning-loop-share/scripts/doctor.py` is just `scripts/doctor.py` here.

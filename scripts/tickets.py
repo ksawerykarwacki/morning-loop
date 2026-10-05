@@ -607,10 +607,23 @@ def cmd_draft(ctx: Ctx, a) -> int:
     st = load_state(ctx)
     existing = {t["id"]: t for t in st["tickets"]}
     n = len(existing)
+    # Re-drafting the same meeting must not duplicate the queue. Found by the loop
+    # in its own output, brief #54 finding 5, 2026-09-25: "Re-running the
+    # meeting-actions draft step appends instead of replacing (it duplicated the
+    # queue this run)." Cause: an item with no explicit id got a fresh `t{n}` every
+    # run, so identical content became a new row. Match on the content hash instead,
+    # which is the same field that guards an approval against its source moving.
+    by_hash = {source_hash(x): x["id"] for x in existing.values() if x.get("source_hash")}
     for t in incoming:
         if not t.get("id"):
-            n += 1
-            t["id"] = f"t{n}"
+            h = source_hash(t)
+            same = by_hash.get(h)
+            if same:
+                t["id"] = same          # same source, same item: update it in place
+            else:
+                n += 1
+                t["id"] = f"t{n}"
+                by_hash[h] = t["id"]
         prev = existing.get(t["id"], {})
         if prev.get("state") == STATE_CREATED and not a.replace:
             print(f"skipping {t['id']}: already created as {prev.get('jira_key')}")

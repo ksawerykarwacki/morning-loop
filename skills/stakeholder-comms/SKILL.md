@@ -19,7 +19,7 @@ Transforms any source document — sprint report, decision brief, incident summa
 
 ## Configuration
 ```yaml
-workspace: /Users/tomek/Projects/po-workspace
+workspace: . (the workspace you run /morning from)
 communication_matrix: 02-stakeholder-comms/communication-matrix.md
 context_file: 00-core/CLAUDE.md
 output_file: stakeholder-updates-batch.md   # overwritten on each run

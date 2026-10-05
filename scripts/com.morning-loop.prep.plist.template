@@ -16,7 +16,8 @@
   Install (per-user, no sudo):
       cp com.morning-loop.prep.plist ~/Library/LaunchAgents/
       launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.morning-loop.prep.plist
-      launchctl list | grep -i morning        # expect EXACTLY one entry
+      launchctl list | grep -i morning        # expect two entries once the catch-up
+                                              # job is loaded too (see SETUP-DELIVERY.md)
 
   Older macOS, or if bootstrap is unavailable:
       launchctl load ~/Library/LaunchAgents/com.morning-loop.prep.plist
@@ -25,8 +26,9 @@
       launchctl bootout gui/$UID/com.morning-loop.prep
       rm ~/Library/LaunchAgents/com.morning-loop.prep.plist
 
-  Two entries means two runs racing, which is a race condition the squad has
-  already fixed once. If you migrated from an older workspace path, boot the
+  Load com.morning-loop.catchup.plist next to this one: it retries until a
+  brief has landed, which is what makes the brief arrive on a laptop. More than
+  those two entries means runs racing. If you migrated from an older workspace path, boot the
   old label out before loading this one.
 
   StartCalendarInterval fires in the machine's LOCAL time, not the timezone in

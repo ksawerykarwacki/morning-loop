@@ -87,7 +87,19 @@ def die(msg: str, code: int = 2) -> "NoReturn":  # type: ignore[valid-type]
     raise SystemExit(code)
 
 
+WORKSPACE_MARKERS = ("05-automation/agent-manager", "01-sprint-operations")
+
+
 def repo_root(start: pathlib.Path | None = None) -> pathlib.Path:
+    # The workspace you run from wins. Since v4 the scripts are LINKED into a
+    # workspace (scripts/setup-workspace.sh), so resolving __file__ lands in the
+    # package clone and its .git, and every stamp and packet would be written into
+    # the package instead of the workspace. Found by the v4 fresh-install test.
+    if start is None:
+        cwd = pathlib.Path.cwd()
+        for cand in [cwd, *cwd.parents]:
+            if any((cand / m).is_dir() for m in WORKSPACE_MARKERS):
+                return cand
     p = (start or pathlib.Path(__file__)).resolve()
     for cand in [p] + list(p.parents):
         if (cand / ".git").exists():

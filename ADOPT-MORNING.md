@@ -1,6 +1,6 @@
 # Adopt `/morning` — the agent-manager daily loop
 
-This is how you (Arame, Xitong, Cynthia, Bex, anyone) get your own version of the loop Tomek runs every morning: it senses your day (standup, pulse, Every.to, Jira, your meetings), decides which of *your* recurring jobs are due, shows you the work, asks permission, then drafts the automatable ones and hands you a review + decision queue.
+This is how you get your own version of the loop Tomek runs every morning: it senses your day (standup, pulse, Every.to, Jira, your meetings), decides which of *your* recurring jobs are due, shows you the work, asks permission, then drafts the automatable ones and hands you a review + decision queue.
 
 You **do not edit the `/morning` command**. You copy one config file, fill in your jobs, and run. That copy-and-fill is the whole point — the loop is the same for everyone; only your config differs.
 
@@ -57,34 +57,28 @@ rather than counting parents: if there is a workspace above this clone it instal
 not it says so and installs into the clone, which loads only for a session rooted inside it. `$HOME`
 always loads, so that stays the default.
 
-### Step 2 — copy the config template and run the doctor (3 min)
+### Step 2: set up your workspace and run the doctor (3 min)
+
+**New in v4.** `/morning` and the scheduled runner read and write fixed folders
+(`01-sprint-operations/current/`, `05-automation/agent-manager/`, `06-skills/skills/`).
+A bare clone has none of them, so v4 ships a script that creates them in the folder
+you work from and links this package in:
 
 ```bash
-# standalone clone: the canonical template is the one at the package root
-cp agent-manager-config.template.yml agent-manager-config.<you>.yml
-
-# workspace layout: same file, into the skills directory /morning resolves from
-cp agent-manager-config.template.yml \
-   06-skills/skills/agent-manager-config.<you>.yml
-
-python3 scripts/doctor.py
+./scripts/setup-workspace.sh ~/work/my-workspace <your-name>    # an existing folder or a new one
+cd ~/work/my-workspace
+export MORNING_CONFIG="$PWD/06-skills/skills/agent-manager-config.<your-name>.yml"
+python3 05-automation/agent-manager/scripts/doctor.py
 ```
 
-`skills/agent-manager-config.template.yml` is a byte-identical duplicate of the root template, kept so the
-workspace layout keeps working. Copy from the root one; neither is going away. If you are an engineer,
-`skills/agent-manager-config.engineer.yml` is the same template with the dev routing already filled in.
+It never overwrites anything of yours, and it links the package rather than copying
+it, so a `git pull` in the clone updates your workspace. It also drops a starter
+config, a starter coaching plan and an empty commitments ledger where none exist.
+Engineers can start from `skills/agent-manager-config.engineer.yml` instead: copy it
+over the starter config, keeping the file name.
 
-**Where the filled config has to live is not one path, and this is worth reading once.** `/morning`
-resolves `$MORNING_CONFIG`, then `<package>/skills/agent-manager-config.<you>.yml`, then
-`06-skills/skills/agent-manager-config.<you>.yml`. `doctor.py` resolves `$MORNING_CONFIG`, then
-`06-skills/skills/…`, then `<repo-root>/agent-manager-config.<you>.yml`. Those overlap in the workspace
-layout and **do not overlap in a standalone clone**, where the command reads `skills/` and the doctor
-reads the root. Until the two resolvers agree, set `MORNING_CONFIG` to your filled config and both will
-find the same file:
-
-```bash
-export MORNING_CONFIG="$PWD/agent-manager-config.<you>.yml"
-```
+Put `export MORNING_CONFIG=...` in your shell profile, so `/morning`, the doctor and
+the scheduled runner all read the same file. Always run `/morning` from the workspace.
 
 The doctor is the whole difference in this release. It distinguishes three states that used to look identical:
 

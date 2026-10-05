@@ -20,6 +20,9 @@ owner:
   jira_project: KM
   timezone: <YOUR TZ e.g. Europe/Warsaw, Asia/Singapore>   # FILL: the loop's day boundary =
                                 # YOUR morning, not CET midnight. Fixes "since last run" diffs.
+  jira_team_scope: 'cf[10104] = "<YOUR TEAM UUID>"'   # FILL if your project is shared: the Team
+                                # field by UUID (a display-name query returns 0, not an error).
+                                # The verifier agents use it to decide what is yours.
   jira_boards: [<YOUR BOARD IDS>]   # FILL: KM is shared across squads. The squad-scope guard
                                 # JQL-verifies every ticket against these before it reaches your
                                 # plan. Without this, other squads' tickets leak into your day.
@@ -296,13 +299,100 @@ feedback:
 # ---------------------------------------------------------------------------
 # File locations — adjust the repo-relative paths if your workspace differs.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# V4 BLOCKS. On by default in a fresh config. Each one is code, not prose: the
+# script named is what enforces it, and doctor.py checks the file resolves.
+# ---------------------------------------------------------------------------
+trust:
+  enabled: true
+  script: "05-automation/agent-manager/scripts/trust.py"
+  shipped_script: "05-automation/agent-manager/scripts/shipped.py"
+  stamp_every_draft: true           # a draft with no stamp is listed as UNSTAMPED
+  inject_provenance_header: true    # the verdict block at the top of every draft
+  build_review_packet: true         # one file holding every draft, its verdict, its ship action
+  packet: "01-sprint-operations/current/review-packet-{DATE}.md"
+  corrections_hold_drafts: true     # a claim the loop found wrong holds every draft that repeats it
+  preflight_blocks_external_without_verifiers: true   # no verifier agents, no external draft
+  outbound_ledger: "05-automation/agent-manager/outbound-ledger.md"
+  outbound_ledger_jsonl: "05-automation/agent-manager/outbound-ledger.jsonl"
+  record_hand_ships: true           # /shipped records what you send by hand
+  brief_claims_census: true         # the [V]/[R]/[I]/[C] markers in the brief are computed, not claimed
+
+tickets:
+  enabled: true
+  script: "05-automation/agent-manager/scripts/tickets.py"
+  queue: "01-sprint-operations/current/agent-drafts/{DATE}/meeting-actions.md"
+  approve_by: checkbox              # [x] do it · [-] drop it · then `tickets.py sync`
+  kinds: [ticket, decision, update, research, question, idea]
+
+coaching:
+  enabled: true
+  script: "05-automation/agent-manager/scripts/coach.py"
+  dir: "05-automation/agent-manager/coach/"
+  plan: "05-automation/agent-manager/coach/plan.md"   # starter copied by setup-workspace.sh; edit it
+  in_brief: true
+  one_per_day: true
+  min_gap_days_same_thread: 2
+  park_after_declines: 2
+  park_days: 30
+  require_stoic_frame: true         # in your control + not in your control + one thing today
+
+product_feedback:
+  enabled: false                    # occasional closed question on a live decision; switch on after week 1
+  script: "05-automation/agent-manager/scripts/sharpen.py"
+  log: "05-automation/agent-manager/coach/challenges.jsonl"
+  cooldown_days: 5
+  one_open_at_a_time: true
+  must_be_a_closed_question: true
+  max_per_run: 1
+
+provenance:
+  ledger: "05-automation/agent-manager/provenance.jsonl"
+  durable_ids: true                 # {DATE}/{id}, so an item can be pointed at across days
+  links: [derived_from, supersedes]
+  outcome_requires_source: true
+  stub_rule: true                   # a ticket drafted from summary-level notes ships as a one-criterion stub
+  require_source_excerpt: true
+
+# ---------------------------------------------------------------------------
+# OPTIONAL SENSES, v4. Each is off unless you switch it on here. A block that is
+# missing counts as off, and the brief does not list it as degraded.
+# ---------------------------------------------------------------------------
+reading:
+  enabled: true                       # Every.to digest; set false to drop the line from the brief
+
+mattermost_triage:
+  enabled: false                      # FILL: true if you live in Mattermost
+  provider: mcp__claude_ai_Ideawise_Mattermost
+  mode: read_only                     # no write tool is ever called by the loop
+  since: last_successful_run          # falls back to 3 days back if there is no prior run
+  mentions_query: "@<your-handle>"    # FILL: catches DMs and channels outside the watchlist
+  watchlist:                          # FILL: your priority channels, keyed by ID (names are not unique)
+    # - {id: "<channel id>", name: "<channel name>", team: "<team>", priority: top}
+  unanswered_rule: "thread last post not by the owner AND (owner mentioned OR DM OR owner earlier promised an action)"
+  promises_to_ledger: true            # "I'll create a ticket" said by you in a thread becomes a MINE row
+  buckets: [needs_reply, decision_or_action, fyi, noise]
+  show_all_buckets: true
+  quotes: paraphrase_only
+
+# okr_kpis:                           # uncomment to pin metrics in the brief every day
+#   pulse_always_print: [<metric id>, ...]
+#   season_funnel_always_print: [<kpi id>, ...]   # read baselines and targets from your goals file
+
 paths:
   plan_file: "01-sprint-operations/current/morning-plan-{DATE}.md"
   review_dir: "01-sprint-operations/current/agent-drafts/{DATE}/"
   decision_queue: "01-sprint-operations/current/needs-decision-{DATE}.md"
   run_log: "05-automation/agent-manager/run-log.md"
   meeting_notes_dir: "10-meeting-notes/"    # ceremony_capture writes one file per sensed meeting
-  rubrics_dir: "rubrics/"                   # package root, where the shipped rubrics live: Phase 3b reads
-                                            # {rubrics_dir}/{skill}.rubric.yml. Resolved from the root the
-                                            # loop found, so prefix the clone folder (e.g. "morning-loop/
-                                            # rubrics/") if the package sits inside a bigger workspace.
+  rubrics_dir: "05-automation/agent-manager/rubrics/"   # linked into your workspace by
+                                            # scripts/setup-workspace.sh; Phase 3b reads
+                                            # {rubrics_dir}/{skill}.rubric.yml
+  hygiene_queue: "01-sprint-operations/current/hygiene-queue.md"
+  commitments_ledger: "01-sprint-operations/current/commitments-ledger.md"
+  action_queue: "01-sprint-operations/current/agent-drafts/{DATE}/meeting-actions.md"
+  coach_dir: "05-automation/agent-manager/coach/"
+  review_packet: "01-sprint-operations/current/review-packet-{DATE}.md"
+  trust_dir: "01-sprint-operations/current/agent-drafts/{DATE}/.trust/"
+  outbound_ledger: "05-automation/agent-manager/outbound-ledger.md"
+  provenance: "05-automation/agent-manager/provenance.jsonl"

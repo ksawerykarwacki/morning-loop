@@ -1,5 +1,5 @@
 ---
-description: "Load a morning brief by its #id (or a date, or 'latest') and pull in everything around it: the plan file, that day's agent drafts, the run-log entry, and the delivery receipt. Use when you want to pick up a morning brief in conversation."
+description: "Load a morning brief by its #id (or a date, or 'latest') and pull in everything around it: the plan file, that day's agent drafts, the run-log entry, and the delivery receipt. Use when you want to pick up a morning brief in conversation ('brief #56', 'morning loop 21', 'latest brief'). Not for ticket kickoff briefs (ticket-brief)."
 argument-hint: "[#21 | 21 | 2026-08-05 | latest | last 3]"
 ---
 

@@ -33,9 +33,9 @@ Prefer reading the actual transcript for a new meeting (`mcp__granola__get_meeti
 
 Check if `01-sprint-operations/current/pulse-reports/pulse-{TODAY}.md` exists.
 - **Exists** → load it, skip re-querying Amplitude.
-- **Does not exist** → run the full pulse per `06-skills/skills/product-pulse.md` and save it. If the Amplitude MCP is not authenticated, do **not** silently fabricate numbers — note "Amplitude not connected; metrics carried from {last pulse date}" and load the most recent pulse instead.
+- **Does not exist** → run the full pulse per the product-pulse skill (`.claude/skills/product-pulse/SKILL.md`) and save it. If the Amplitude MCP is not authenticated, do **not** silently fabricate numbers — note "Amplitude not connected; metrics carried from {last pulse date}" and load the most recent pulse instead.
 
-In **team member mode**: load the pulse file if it exists (Tomek may have already run it). If not, run a lightweight version — DAU escorts 7D avg and any active experiments only. Skip full retention cohort analysis.
+In **team member mode**: load the pulse file if it exists (Tomek may have already run it). If not, run a lightweight version — the signup volume line and any active funnel experiments only. Skip full retention cohort analysis.
 
 Extract from pulse:
 - Sprint health signal (on track / at risk / off track)
@@ -145,7 +145,7 @@ This is the payoff. Cross-reference everything gathered in Steps 1–6 and produ
 - **Momentum** (Step 4): tickets in Code Review/Testing that one nudge takes to Done → high-ROI *ship* actions.
 - **Decision debt** (Steps 2, 4): experiments past their read window, tickets stale 3+ days, anything waiting on a Tomek decision → *decide / unblock*.
 - **Commitments ledger** (Step 1): `MINE` items with no movement → *don't-drop*; `WAITING_ON` past its chase window → *unblock/chase*; any `FUTURE` item whose trigger arrived today → *start/prep*; propose closing any `MINE` item mapped to a Done ticket.
-- **Risk flags** (Step 2): pulse risks (e.g. retention decline) with no owner → *assign / investigate*.
+- **Risk flags** (Step 2): pulse risks (e.g. a guardrail warning) with no owner → *assign / investigate*.
 - **Calendar pressure**: GC Thursday, season kickoff, sign-offs, demos due this week → *prep*.
 - **Learning** (Step 3): a high-value idea worth a small experiment → optional *learning* action.
 
