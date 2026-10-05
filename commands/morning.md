@@ -61,6 +61,8 @@ Probe each MCP the run depends on with its cheapest read, and print a one-line s
 | Granola / meeting source | the configured `meeting_source` read | `transcript_new` cannot fire; note it |
 | Mattermost (only if `mattermost_triage.enabled`) | `get_team_info` | `mattermost_triage` cannot run. Say so on the MATTERMOST line; it does not affect delivery |
 
+**Working files go in `05-automation/agent-manager/tmp/`, never the system `/tmp`.** Two loops on one machine (yours and a test setup, or two people's) used to read each other's `/tmp/claims-{DATE}.json`, because the name carries only the date. Found 2026-10-05 when a fresh test run picked up another loop's claims.
+
 **One command per Bash call.** The unattended sandbox refuses compound commands, `find -exec`, and the project venv. Bare `python3` has no `httpx`, so anything needing it degrades silently to mock data rather than failing loudly.
 
 **Before the MCP probes, validate the config against reality.** Run:
@@ -171,7 +173,7 @@ The loop's job is to close things, not to describe them. A finding that gets re-
 **Write the ASKs to a file the owner answers inline, not into the brief as prose.** This is the fix for the defect that has blocked the loop for a month: between 2026-08-28 and 2026-09-24 the loop asked 9 things and recorded 0 answers, not because they were unwilling but because answering meant a second trip to a terminal.
 
 ```
-python3 05-automation/agent-manager/scripts/asks.py --date {DATE} render --in /tmp/asks-{DATE}.json
+python3 05-automation/agent-manager/scripts/asks.py --date {DATE} render --in 05-automation/agent-manager/tmp/asks-{DATE}.json
 ```
 
 Each ask is `{question, why_it_matters, ask (who can answer), options[] OR recommendation, evidence[], carried}`. **`why_it_matters` is mandatory and names what changes depending on the answer**; if nothing changes it is not a blocker and does not belong in front of them. **Options appear only where the candidate answers change the outcome in materially different ways.** Where there is one defensible answer, drop the list, set `recommendation`, and the question becomes a confirmation. A one-item options list is refused. A clean run gets zero questions, and the file is still written, because absence and zero must not look identical.
@@ -309,8 +311,8 @@ A **KILLED** claim never reaches the brief. It is logged in the run log as `kill
 The drafts have carried a provenance header since v3. The brief carries roughly 40 claims and got one verdict, and on the first v3 run the gate was pointed at 3 of about 40. Uniform presentation invites uniform trust. So **every claim that survives the gate and reaches the brief is recorded**, and trust.py, not you, decides its marker:
 
 ```
-# Write to /tmp/claims-{DATE}.json, then pass the path. No heredocs in the prep sandbox.
-python3 05-automation/agent-manager/scripts/trust.py --date {DATE} claims record --in /tmp/claims-{DATE}.json
+# Write to 05-automation/agent-manager/tmp/claims-{DATE}.json, then pass the path. No heredocs in the prep sandbox.
+python3 05-automation/agent-manager/scripts/trust.py --date {DATE} claims record --in 05-automation/agent-manager/tmp/claims-{DATE}.json
 # the file's contents, one entry per claim in the brief (killed ones too, with "killed": true):
 [{"id": "{short slug}", "text": "{the claim as it reads in the brief}",
   "probe_agent": "{agent id of the probe that produced it}",
@@ -378,8 +380,8 @@ It returns the **thread** due today (from `coach/plan.md`, by priority and stale
 **Then write the nudge, and record it. The recording is what enforces the frame:**
 
 ```
-# Write to /tmp/nudge-{DATE}.json, then pass the path. No heredocs in the prep sandbox.
-python3 05-automation/agent-manager/scripts/coach.py --date {DATE} nudge --zoom {zoom} --in /tmp/nudge-{DATE}.json
+# Write to 05-automation/agent-manager/tmp/nudge-{DATE}.json, then pass the path. No heredocs in the prep sandbox.
+python3 05-automation/agent-manager/scripts/coach.py --date {DATE} nudge --zoom {zoom} --in 05-automation/agent-manager/tmp/nudge-{DATE}.json
 # the file's contents:
 {"thread": "{thread id}",
  "observation": "{what you actually see, with the evidence in it}",
@@ -416,8 +418,8 @@ Pass the signals this run actually found: an experiment the pulse flagged, a goa
 When one fires, write **one closed question** about the specific claim, number or assumption, and record it:
 
 ```
-# Write to /tmp/challenge-{DATE}.json, then pass the path.
-python3 05-automation/agent-manager/scripts/sharpen.py --date {DATE} fired --in /tmp/challenge-{DATE}.json
+# Write to 05-automation/agent-manager/tmp/challenge-{DATE}.json, then pass the path.
+python3 05-automation/agent-manager/scripts/sharpen.py --date {DATE} fired --in 05-automation/agent-manager/tmp/challenge-{DATE}.json
 # the file's contents:
 {"topic": "{short slug}", "question": "{one closed question, ending in a question mark}",
  "why_now": "{why this morning is the moment}", "evidence": ["{what makes it real}"]}
@@ -578,10 +580,10 @@ So when `dispatch.predraft_in_prep` is true, the unattended prep **does the SOLV
 4. **Stamp it, and let the stamp decide the label.** The moment a draft's verification finishes, record how it was graded and let `trust.py` compute the verdict. Do not write a label into the file yourself.
 
    ```
-   # Write this JSON with the Write tool to /tmp/stamp-{job}.json FIRST, then pass the PATH.
+   # Write this JSON with the Write tool to 05-automation/agent-manager/tmp/stamp-{job}.json FIRST, then pass the PATH.
    # A heredoc with braces and quotes is refused by the unattended sandbox as "expansion
    # obfuscation". Every one of these scripts takes --in <path> as well as --in -.
-   python3 05-automation/agent-manager/scripts/trust.py --date {DATE} stamp --in /tmp/stamp-{job}.json
+   python3 05-automation/agent-manager/scripts/trust.py --date {DATE} stamp --in 05-automation/agent-manager/tmp/stamp-{job}.json
    # the file's contents:
    {"job": "{routing id}", "skill": "{skill}", "external_action": "{from the routing rule}",
     "artifact": "{path under paths.review_dir}",
@@ -612,8 +614,8 @@ So when `dispatch.predraft_in_prep` is true, the unattended prep **does the SOLV
 
 
    ```
-   # Same rule: Write the JSON to /tmp/actions-{DATE}.json, then pass the path.
-   python3 05-automation/agent-manager/scripts/tickets.py --date {DATE} draft --in /tmp/actions-{DATE}.json
+   # Same rule: Write the JSON to 05-automation/agent-manager/tmp/actions-{DATE}.json, then pass the path.
+   python3 05-automation/agent-manager/scripts/tickets.py --date {DATE} draft --in 05-automation/agent-manager/tmp/actions-{DATE}.json
    # the file's contents:
    [{"kind": "ticket", "title": "[FE] ...", "issue_type": "Story", "role": "{accountable role}",
      "epic": "KM-...", "verified_keys": ["{every key you confirmed on one of owner.jira_boards}"],
