@@ -107,6 +107,14 @@ done
 launchctl list | grep -i morning               # expect EXACTLY two entries: prep and catchup
 ```
 
+### What the unattended run may do without asking
+
+Nobody is there to answer a permission prompt at 07:52, so the Claude Code runner says up front what the run may do (`--allowedTools`), and Claude Code denies everything else rather than waiting. Pre-approved by default: writing the brief and drafts inside the workspace (`--permission-mode acceptEdits`), and the engine scripts `/morning` calls, one rule per script. **No connector tool is pre-approved by default.**
+
+To let the run read your tools, list their **read-only** tools in `MORNING_ALLOWED_TOOLS` near the top of your filled-in runner, one full name per line (`mcp__<server>__<tool>`, where `<server>` is the name you gave the connector in Claude Code). Leave out anything that creates, posts, sends or edits. Don't use `mcp__<server>` or `mcp__<server>__*`: those approve that server's write tools too, and this run reads your inbox and chat, which anyone can write into. Allow rules already in your Claude Code settings still apply.
+
+With nothing listed, the run still finishes, with a thinner brief: each connector read is denied and the brief is made from what it could read. The runner log's `permissions:` line shows what was pre-approved for each run. The OpenCode and Codex runners don't take this list; see the note in each template.
+
 **Why two jobs.** The prep job fires at one fixed time, and on a laptop that time
 usually lands in a DarkWake on battery: no keychain, no Wi-Fi, a few seconds awake.
 On the PO loop that alone produced 7 missed mornings in 3 weeks. The catch-up job

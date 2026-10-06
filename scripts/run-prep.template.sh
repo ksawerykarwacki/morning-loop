@@ -26,6 +26,19 @@ else
   DRAFTS_REL="01-sprint-operations/current/agent-drafts"
 fi
 ENGINE="$WORKDIR/$ENGINE_REL"
+
+# FILL (optional): connector tools the unattended run may call without asking.
+# None by default. A run with none listed still finishes, with a thinner brief:
+# in --print mode a connector call that isn't approved is denied, not prompted.
+# List READ-ONLY tools by full name, mcp__<server>__<tool>, where <server> is the
+# name you gave it in Claude Code. Don't use "mcp__<server>" or
+# "mcp__<server>__*": those approve the server's write tools too (create an issue,
+# post a message, send mail), and this run reads inbox and chat, which anyone can
+# write into. Allow rules in your Claude Code settings still apply on top of these.
+MORNING_ALLOWED_TOOLS=(
+  # "mcp__atlassian__getJiraIssue"               # examples only: tool names
+  # "mcp__atlassian__searchJiraIssuesUsingJql"   # differ by server, check yours
+)
 cd "$WORKDIR" || { echo "$(date) FAILED cd $WORKDIR" >> "$LOG"; exit 1; }
 
 # ---------------------------------------------------------------------------
@@ -200,9 +213,15 @@ echo "===== $(date '+%Y-%m-%d %H:%M:%S') starting /morning --prep$MODE_NOTE ====
 # plan file without a prompt. The --prep path is read-only beyond local file writes;
 # it never performs a never_auto external action (those are interactive-only by design).
 #
-# --allowedTools: permits Bash (for python3 engine calls) and MCP connectors (for live
-# data reads: Jira, Notion, Slack, etc). This preempts permission prompts on a fresh
-# account where these are not yet allowed.
+# --allowedTools approves, with no prompt, exactly two things (ALLOW, below):
+#   - the engine scripts /morning calls, one rule per script. A rule ending in the
+#     directory and `*` would also match `python3 <dir>/../anything.py`, and this
+#     run can write files.
+#   - the connector tools you listed in MORNING_ALLOWED_TOOLS at the top.
+# Never "mcp__*": Claude Code skips an unanchored allow glob with a warning, so it
+# approves nothing, and a wildcard that did match would approve every write tool
+# of every connector in a run that reads untrusted text. Anything else is denied:
+# --print has nobody to ask.
 #
 # Bounded with a watchdog rather than `timeout`, which macOS does not ship. An
 # unbounded headless invocation once burned 43 minutes failing to authenticate
@@ -217,6 +236,16 @@ echo "===== $(date '+%Y-%m-%d %H:%M:%S') starting /morning --prep$MODE_NOTE ====
 # Record where today's slice of the cumulative log starts, so the failure
 # classifier below reads only THIS run and not four weeks of history.
 LOG_START=$(wc -c < "$LOG" 2>/dev/null || echo 0)
+
+ALLOW=()
+for s in asks coach doctor notify ontime sharpen shipped tickets trust; do
+  ALLOW+=("Bash(python3 $ENGINE_REL/$s.py *)")
+done
+# In the v4 layout, /morning's Phase 0 runs the doctor through the package link.
+[ "$ENGINE_REL" = "05-automation/agent-manager/scripts" ] \
+  && ALLOW+=("Bash(python3 05-automation/agent-manager/morning-loop-share/scripts/doctor.py *)")
+ALLOW+=("${MORNING_ALLOWED_TOOLS[@]}")
+echo "permissions: ${#MORNING_ALLOWED_TOOLS[@]} connector tool(s) pre-approved (MORNING_ALLOWED_TOOLS)${MORNING_ALLOWED_TOOLS[*]:+: ${MORNING_ALLOWED_TOOLS[*]}}" >> "$LOG"
 
 
 # (The single-shot "no network yet" check that stood here moved up into the
@@ -241,12 +270,12 @@ LOG_START=$(wc -c < "$LOG" 2>/dev/null || echo 0)
 if [ "$HAVE_CAFF" = "1" ]; then
   caffeinate -ims claude --print "/morning --prep" \
     --permission-mode acceptEdits \
-    --allowedTools "Bash(python3 $ENGINE_REL/*)" "mcp__*" \
+    --allowedTools "${ALLOW[@]}" \
     >> "$LOG" 2>&1 &
 else
   claude --print "/morning --prep" \
     --permission-mode acceptEdits \
-    --allowedTools "Bash(python3 $ENGINE_REL/*)" "mcp__*" \
+    --allowedTools "${ALLOW[@]}" \
     >> "$LOG" 2>&1 &
 fi
 CLAUDE_PID=$!
