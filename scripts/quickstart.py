@@ -40,6 +40,13 @@ CLIENTS = {
 }
 
 
+# Package files this path runs or sends you to. Some are not in the repo yet; check
+# before installing anything rather than failing at step 1 with "can't open file".
+REQUIRED = ("scripts/install.py", "scripts/setup.py", "commands/onboard.md",
+            "templates/config.template.yml", "templates/profile.template.md", "templates/goals.template.md",
+            "templates/ledger.template.md", "templates/coach-plan.template.md")
+
+
 def ask(prompt: str, default: str = "") -> str:
     try:
         ans = input(f"{prompt} ").strip()
@@ -52,6 +59,14 @@ def main() -> int:
     print("\n☀️  Morning Loop · quick start\n")
     if sys.version_info < (3, 9):
         print(f"Python {sys.version.split()[0]} is too old. Install Python 3.9 or newer from https://www.python.org/downloads/")
+        return 1
+    missing = [f for f in REQUIRED if not (PKG / f).is_file()]
+    if missing:
+        print("✗ This install path isn't complete in this version of the repo; these files are missing:")
+        for m in missing:
+            print(f"    {m}")
+        print("  Nothing was installed. Use the v4 path in ADOPT-MORNING.md instead:")
+        print(f"    {PY} scripts/setup_workspace.py <workspace> <your-name> --role <preset>")
         return 1
 
     # 1. which client

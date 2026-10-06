@@ -23,6 +23,8 @@ Setup is a series of short stages. Each one says what it costs and what it adds,
 
 ## Quick start
 
+> **Not ready in this version of the repo.** The staged install below needs files that aren't in `main` yet (`scripts/install.py`, `commands/onboard.md` and four templates), so `quickstart.py` and `setup.py` stop with a message naming them. Until they land, install with the v4 path in [`ADOPT-MORNING.md`](ADOPT-MORNING.md) (`scripts/setup_workspace.py`).
+
 **New to terminals or VS Code?** Follow [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md): about 20 minutes on a Mac or a Windows PC, step by step.
 
 Otherwise: you need Python 3.9+ and one of the clients above, installed and logged in. Download ([ZIP](https://github.com/tduda/morning-loop/archive/refs/heads/main.zip)) or clone this repo (`git clone https://github.com/tduda/morning-loop.git`), then double-click **Start here - Mac.command** or **Start here - Windows.bat**, or run:

@@ -40,6 +40,14 @@ STARTERS = (
     ("state/ledger.md", "ledger.template.md"),
     ("state/coach/plan.md", "coach-plan.template.md"),
 )
+V4_PATH = ("Use the v4 path in ADOPT-MORNING.md instead:\n"
+           "    python3 scripts/setup_workspace.py <workspace> <your-name> --role <preset>")
+
+
+def missing_files() -> list[str]:
+    """Package files this script needs. Some are not in the repo yet, and setup used to
+    find out halfway through, leaving a half-built morning/ folder behind."""
+    return [f"templates/{src}" for _, src in STARTERS if not (TPL / src).is_file()]
 
 
 def find_working_python() -> str:
@@ -67,6 +75,14 @@ def main() -> int:
     ap.add_argument("--refresh", action="store_true",
                     help="after a git pull: re-copy engine/ and package/ where they are copies, not links")
     a = ap.parse_args()
+
+    missing = missing_files()
+    if missing:
+        print("✗ This install path isn't complete in this version of the repo; these files are missing:")
+        for m in missing:
+            print(f"    {m}")
+        print("  Nothing was written. " + V4_PATH)
+        return 1
 
     ws = pathlib.Path(a.folder).expanduser()
     dry = a.dry_run
