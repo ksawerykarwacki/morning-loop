@@ -8,6 +8,9 @@ those fails silently at run time, so this checks them before you rely on them.
     cd <your folder> && python3 morning/engine/doctor.py
     python3 morning/engine/doctor.py --json
 Exit 0: nothing blocking. Exit 1: something the loop needs is missing (named, with the fix).
+
+A v4 setup (05-automation/agent-manager/..., ADOPT-MORNING.md) is handed to
+doctor_v4.py with the same arguments; see v4_layout().
 """
 from __future__ import annotations
 
@@ -17,6 +20,7 @@ import os
 import pathlib
 import platform
 import re
+import runpy
 import subprocess
 import sys
 
@@ -38,6 +42,35 @@ LOAD = {
 def workspace() -> pathlib.Path | None:
     cwd = pathlib.Path.cwd()
     return next((p for p in [cwd, *cwd.parents] if (p / "morning" / "state").is_dir()), None)
+
+
+# Flags only doctor_v4.py takes. install-skills.sh passes --client and --repo-root.
+V4_ONLY_FLAGS = ("--config", "--repo-root", "--repo", "--client")
+
+
+def v4_layout() -> bool:
+    """Is this a v4 setup, which only doctor_v4.py knows how to check?
+
+    The v4 path (setup_workspace.py, ADOPT-MORNING.md, CLAUDE.md, install-skills.sh)
+    puts the engine in 05-automation/agent-manager/ and the config in
+    06-skills/skills/. A morning/ folder above cwd means the new layout, unless a
+    v4-only flag was passed.
+    """
+    if any(arg.split("=", 1)[0] in V4_ONLY_FLAGS for arg in sys.argv[1:]):
+        return True
+    if workspace() is not None:
+        return False
+    cwd = pathlib.Path.cwd()
+    if any((p / "05-automation" / "agent-manager").is_dir() for p in [cwd, *cwd.parents]):
+        return True
+    # Run by path from elsewhere: the unresolved path still goes through the workspace link.
+    if "05-automation/agent-manager/" in pathlib.Path(__file__).absolute().as_posix():
+        return True
+    env = os.environ.get("MORNING_CONFIG") or ""
+    if pathlib.Path(env).name.startswith("agent-manager-config."):
+        return True
+    # A standalone package clone with its own v4 config (CONTRIBUTING.md's validation run).
+    return any("template" not in p.name for p in PKG.glob("agent-manager-config.*.yml"))
 
 
 def load_config(path: pathlib.Path) -> dict:
@@ -134,7 +167,8 @@ def main() -> int:
 
     ws = workspace()
     if ws is None:
-        add("workspace", "morning/ folder", "NOT FOUND", "run python3 scripts/setup.py <folder>, then run this from that folder", True)
+        add("workspace", "morning/ folder", "NOT FOUND", "run python3 scripts/setup.py <folder>, then run this from that folder "
+            "(for the v4 layout in ADOPT-MORNING.md, run this from the workspace you made with setup_workspace.py)", True)
         return report(rows, blocked, a.json, None)
     root = ws / "morning"
     add("workspace", str(ws), "ok")
@@ -222,4 +256,6 @@ def report(rows, blocked, as_json, ws) -> int:
 
 
 if __name__ == "__main__":
+    if v4_layout() and (HERE / "doctor_v4.py").is_file():
+        runpy.run_path(str(HERE / "doctor_v4.py"), run_name="__main__")   # exits with its own code
     sys.exit(main())
