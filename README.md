@@ -1,81 +1,81 @@
-> **This repo moved to GitHub Enterprise on 2026-09-25.**
-> Home: `https://ideawise.ghe.com/tomzduda/morning-loop` . The lab GitLab copy
-> (`gitlab.thenetcircle.lab/tomzduda/morning-loop`) is a frozen archive and must not be pushed to.
-> If you cloned before that date:
->
-> ```bash
-> git remote set-url origin https://ideawise.ghe.com/tomzduda/morning-loop.git
-> ```
+# Morning Loop ☀️
 
-# The Morning Loop
+**A brief that's waiting for you every morning, made by an AI agent on your own computer from your own tools.**
 
-A daily loop for your workday. Every weekday morning it reads your Jira, your meetings, your inbox and chat, decides which of **your** recurring jobs are due, drafts the ones it can, and hands you one brief: what changed, what needs you, and what's ready for your yes. You keep deciding; it stops doing the gathering. Nothing leaves your machine without your per-item approval.
+Every weekday it reads what you connected (your tasks, calendar, meeting notes, inbox, chat), works out what's due, drafts what it can, and hands you one page: what changed, what needs you, and what's ready for your yes. You keep every decision. Nothing leaves your machine without your per-item approval.
 
-**v4 (beta) is the current release.** Start with [`V4-WHATS-NEW.md`](V4-WHATS-NEW.md).
+It runs in the AI coding agent you already use: **Claude Code**, **OpenCode**, or **Codex CLI** (the local agent for ChatGPT users). Free and open source (MIT).
 
-**The brief is made on your computer, so it arrives when your computer is on.** It runs at 07:52 on weekdays, and if the machine is closed or asleep then, the first time you open it that morning (before 12:00).
+## You decide how far to go
 
-## Start here
+Setup is a series of short stages. Each one says what it costs and what it adds, and proves it works before moving on. The tool stages can be skipped; stage 5 can't, because it's what makes the loop run itself. Stop any time; `/onboard` picks up where you left off.
 
-| You are | Do this |
-|---|---|
-| **Already running the loop (v3.x)** | `python3 scripts/upgrade.py --workspace <your workspace>`: a dry run that shows the plan. Then add `--apply`. It keeps every skill, script, rubric, config and runner you changed, and `--restore` undoes it |
-| **New to the loop** | [`ADOPT-MORNING.md`](ADOPT-MORNING.md), about 20 minutes. Short version below |
-| **Using Claude or OpenCode to do it for you** | open this repo in it and ask. It reads [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md), which tell it how to upgrade without damaging your setup |
-| **Wondering if it fits your role** | [`roles/README.md`](roles/README.md): seven presets that shape the brief to a PO, engineer, scrum master, designer, community manager, data analyst or supporter |
-| **Wanting to contribute something you built** | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Stage | Time | You do | You get from then on |
+|---|---|---|---|
+| 0 · Install | 5 min | install, pick a folder | a working setup, checked end to end |
+| 1 · About you | 10 min | role, timezone, top 3 goals, recurring meetings | **a brief every morning built on your goals, and a commitments list you add to just by talking. Works with zero tools connected.** |
+| 2 · Your task tracker | 10 min | connect Jira, Linear, GitHub or Notion | what's assigned to you, what's stuck, what changed since yesterday |
+| 3 · Calendar and meeting notes | 10 min | Google or Outlook calendar; Granola, Confluence, Notion or a notes folder | prep for today's meetings; yesterday's action items land in your list |
+| 4 · Inbox and chat | 10 min | Gmail or Outlook; Slack or Teams | who's waiting on a reply from you; promises you made in threads, tracked |
+| 5 · Make it automatic (required) | 5 min | schedule it | **the loop runs itself**: the brief is waiting when you open your laptop, nothing to type |
+| 6 · Your recurring jobs | 20 min | a short interview about your recurring work | drafts of your weekly update, meeting prep and follow-ups, checked against a quality bar, sent only with your yes |
+| 7 · Metrics (optional) | 10 min | Amplitude, GA4, Mixpanel or PostHog | a daily pulse on the numbers you choose |
 
-## New to the loop: the short version
+## Quick start
+
+**New to terminals or VS Code?** Follow [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md): about 20 minutes on a Mac or a Windows PC, step by step.
+
+Otherwise: you need Python 3.9+ and one of the clients above, installed and logged in. Download ([ZIP](https://github.com/tduda/morning-loop/archive/refs/heads/main.zip)) or clone this repo (`git clone https://github.com/tduda/morning-loop.git`), then double-click **Start here - Mac.command** or **Start here - Windows.bat**, or run:
 
 ```bash
-git clone https://ideawise.ghe.com/tomzduda/morning-loop.git ~/Projects/morning-loop
-cd ~/Projects/morning-loop
-./scripts/install-skills.sh                                          # skills, commands, agents (Windows: python scripts/upgrade.py --workspace <ws> --apply)
-python3 scripts/setup_workspace.py ~/work/my-workspace <you> --role <preset>   # folders, links, a starter config for your role
-cd ~/work/my-workspace
-export MORNING_CONFIG="$PWD/06-skills/skills/agent-manager-config.<you>.yml"
-python3 05-automation/agent-manager/scripts/doctor.py                # fix until it says ✓
+python3 scripts/quickstart.py          # Mac and Linux
+py scripts\quickstart.py               # Windows
 ```
 
-Restart Claude Code (the verifier agents load at session start), run `/morning` once by hand from your workspace, then schedule it with [`scripts/SETUP-DELIVERY.md`](scripts/SETUP-DELIVERY.md). After a week, run `/jtbd-capture` so the loop learns the jobs you actually do.
+It installs the commands into your client, asks where your brief should live, sets that folder up and checks it. Then open that folder in VS Code (or your client's app or a terminal) and type **`/onboard`**.
 
-## What's in this repo
+**Already have a folder you work in** (notes, a project)? Give its path when asked. The loop adds one subfolder, `morning/`, and touches nothing else.
+
+## Good to know
+
+- **The brief is made on your computer, so it arrives when your computer is on**: at 07:52, or the first time you open it that morning. There's no server, and your data stays on your machine and in the tools you connect.
+- **Read-only first.** Every connector guide prefers read-only access. The loop drafts replies, tasks and updates; sending any of them needs your yes, every time.
+- **Honest by design.** Every claim in the brief carries a marker: verified (re-checked by a separate agent), reported, inferred or carried from an earlier day. Numbers it can't source say "not checked" instead of guessing.
+- **Drafts get good with your examples.** Drop two or three of your own past weekly updates (or meeting notes, or whatever the job produces) into `morning/examples/<skill>/` and the drafts start sounding like you.
+
+## What works where
+
+| | Claude Code | OpenCode | Codex CLI |
+|---|---|---|---|
+| Onboarding, brief, drafts | ✓ | ✓ | ✓ |
+| Independent verifier agents | ✓ | checks run inline, claims marked "reported" | checks run inline, claims marked "reported" |
+| Install and setup | ✓ Mac and Linux; Windows written for it, not yet run on a real PC | same | same |
+| Scheduled runner | ✓ Mac and Linux; Windows written, not yet run on a real PC | Mac and Linux, not yet live-tested | Mac and Linux, not yet live-tested |
+
+Which tools connect to which client, and how, is in [`connectors/README.md`](connectors/README.md). A few combinations aren't possible yet (for example Slack in OpenCode); the guides say so plainly.
+
+## Status
+
+**Beta.** The engine (the trust layer, the questions file, the meeting-action queue, delivery, on-time tracking) comes from a loop run daily since mid-2026. This standalone version is new. What's been tested: a full rehearsal (`tests/run.py`: install for all three clients, setup in an existing folder, the onboarding map, and every runner with stand-in clients) and a real Claude Code run that produced a first brief for a test persona at stage 1. Not yet tested: the interactive `/onboard` conversation with a real newcomer, the tool stages against live accounts, and the OpenCode, Codex and Windows runners on real installs. Please open an issue with what happened on yours.
+
+## Repo map
 
 ```
-README.md, V4-WHATS-NEW.md       ← start here; what v4 brings and how to get it
-ADOPT-MORNING.md                 ← the full onboarding guide
-CLAUDE.md, AGENTS.md             ← instructions for an AI assistant installing or upgrading the loop
-CONTRIBUTING.md                  ← how something you built becomes part of the shared loop
-agent-manager-config.template.yml← the config you copy (setup_workspace.py does it for you)
-roles/                           ← the seven role presets
-commands/                        ← /morning, /brief, /standup, /team-standup, /tickets, /shipped, /coach
-skills/<name>/SKILL.md           ← 15 drafter and sense skills
-agents/                          ← the four read-only verifier agents
-rubrics/                         ← the quality bar each drafter is graded against
-scripts/                         ← doctor, installers, upgrade, workspace setup, runners for Mac, Windows, OpenCode
-coach/, templates/               ← starter coaching plan and commitments ledger
-docs/                            ← reference (RUN-AND-NOTIFY, ATTENTION-TRIAGE) and docs/history/ for earlier versions
+commands/    /onboard, /morning, /brief, /tickets, /shipped, /coach
+stages/      the onboarding stages: cost, what each unlocks, how it's proven
+connectors/  one guide per tool, per client, with a test read
+skills/      today, meeting-prep, meeting-debrief, weekly-update, inbox-triage, stall-check, jobs-interview, metrics-pulse
+rubrics/     the quality bar each drafter is graded against
+roles/       optional presets that shape the brief to your role
+agents/      read-only verifier agents (Claude Code)
+scripts/     install, setup, doctor, onboarding map, the engine, schedulers
+docs/        GETTING-STARTED.md (for beginners), LAYOUT.md, SCHEDULE.md (stage 5)
 ```
 
-Your own files never live here. Your config, brief, drafts and run log live in **your workspace**, which `setup_workspace.py` creates and links this package into.
+## Contributing
 
-## Prerequisites
+Issues and pull requests are welcome. Before committing, run `python3 scripts/check_clean.py` (it keeps the package free of anyone's personal or company context) and `python3 tests/run.py`.
 
-- **Claude Code** (or OpenCode) installed and logged in.
-- **MCPs connected.** The loop degrades gracefully if one is missing and never makes numbers up:
-  - **Atlassian** (Jira and Confluence): your board, and the meeting notes the squad posts to Confluence.
-  - **Amplitude, Microsoft 365, Mattermost**: optional, depending on your role preset.
-- **Python 3** for the scripts.
+## License
 
-## The safety contract
-
-1. **Sense, plan and verify are read-only.** They query and write local files only, so they're safe to schedule.
-2. **Shipping is gated.** A draft in your review folder is a local file. Sending it anywhere needs your explicit, per-item yes.
-3. **Nothing leaves your workspace automatically.** Creating a Jira ticket, publishing a Confluence page or posting to chat is `never_auto`, confirmed item by item even after you approve the morning gate.
-4. **A draft isn't automation; a job shipped on its trigger is.** The run log stays honest about which is which.
-
-Don't loosen the `permissions:` block in your config. One open item for the author: the configs still list `gated_at_morning_approval: [run_drafting_subagents]` (the v2 wording) while `/morning` implements "drafting is local, shipping is gated". `never_auto` covers every external action either way.
-
-## After a week: tell us how it's going
-
-Around day 7, `/morning` asks for five minutes of feedback (`morning-feedback`): what saved you time, which drafts were usable without a rewrite, what to change. Your answers are how the shared loop gets better.
+MIT. See [`LICENSE`](LICENSE).

@@ -7,7 +7,7 @@
 export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 WORKDIR="<PATH TO YOUR WORKSPACE>"   # FILL: the folder you ran setup-workspace.sh on
-LOG="$WORKDIR/05-automation/agent-manager/launchd.log"
+LOG="$WORKDIR/morning/state/runner.log"
 cd "$WORKDIR" || { echo "$(date) FAILED cd $WORKDIR" >> "$LOG"; exit 1; }
 
 # ---------------------------------------------------------------------------
@@ -41,8 +41,8 @@ IF_MISSING=0
 [ "$1" = "--if-missing" ] && IF_MISSING=1
 
 TODAY_G=$(date '+%Y-%m-%d')
-RECEIPT_G="$WORKDIR/05-automation/agent-manager/delivery-receipts/$TODAY_G.json"
-PLAN_G="$WORKDIR/01-sprint-operations/current/morning-plan-$TODAY_G.md"
+RECEIPT_G="$WORKDIR/morning/state/receipts/$TODAY_G.json"
+PLAN_G="$WORKDIR/morning/briefs/$TODAY_G.md"
 
 if [ "$IF_MISSING" = "1" ]; then
   # Weekdays only. %u is 1=Mon .. 7=Sun.
@@ -60,11 +60,31 @@ if [ "$IF_MISSING" = "1" ]; then
   grep -qE '"status": "(sent|rendered_not_sent)"' "$RECEIPT_G" 2>/dev/null && exit 0
 fi
 
+# caffeinate where it exists (it always does on macOS; the guard keeps the script
+# usable on a box without it).
+HAVE_CAFF=0
+command -v caffeinate >/dev/null 2>&1 && HAVE_CAFF=1
+
+# Portable notifications: osascript on macOS, silent elsewhere.
+osa_notify() {   # osa_notify <title> <subtitle> <body>
+  [ "${MORNING_NO_ALERT:-0}" = "1" ] && return 0
+  [ "$(uname)" = "Darwin" ] && /usr/bin/osascript -e "display notification \"$3\" with title \"$1\" subtitle \"$2\" sound name \"Basso\"" >/dev/null 2>&1
+}
+
+# Portable timestamp formatting. date -r is BSD; date -d is GNU.
+fmt_time() {   # fmt_time <unix_seconds>
+  if [ "$(uname)" = "Darwin" ]; then
+    date -r "$1" '+%H:%M:%S'
+  else
+    date -d "@$1" '+%H:%M:%S'
+  fi
+}
+
 # One run at a time. mkdir is atomic, so this is a real mutex rather than a
-# check-then-write race. This closes the scheduled-vs-manual overlap Maria found:
+# check-then-write race. This closes the scheduled-vs-manual overlap an early adopter found:
 # before this, a 07:52 run still going at 09:30 and a hand-invoked /morning could
 # both write the same plan file and the same receipt.
-LOCKDIR="$WORKDIR/05-automation/agent-manager/.run.lock"
+LOCKDIR="$WORKDIR/morning/state/.run.lock"
 if ! mkdir "$LOCKDIR" 2>/dev/null; then
   LOCKPID=$(cat "$LOCKDIR/pid" 2>/dev/null)
   if [ -n "$LOCKPID" ] && kill -0 "$LOCKPID" 2>/dev/null; then
@@ -102,18 +122,28 @@ trap 'rm -rf "$LOCKDIR"' EXIT INT TERM
 NET_HOST="${MORNING_NET_HOST:-api.anthropic.com}"
 NET_WAIT_SECS="${MORNING_NET_WAIT_SECS:-300}"
 NET_STEP_SECS="${MORNING_NET_STEP_SECS:-10}"
-ONTIME="$WORKDIR/05-automation/agent-manager/scripts/ontime.py"
+ONTIME="$WORKDIR/morning/engine/ontime.py"
 
-net_up() { /usr/bin/nc -z -G 4 -w 4 "$NET_HOST" 443 >/dev/null 2>&1; }
+# Portable network probe: Python socket on all platforms, fallback to nc.
+# Skip with MORNING_SKIP_NET_GATE=1 (for tests).
+net_up() {
+  if [ "${MORNING_SKIP_NET_GATE:-0}" = "1" ]; then
+    return 0
+  fi
+  python3 -c "import socket; socket.create_connection(('$NET_HOST', 443), 4)" >/dev/null 2>&1 && return 0
+  # Fallback: nc without -G (macOS flag not on Linux). -w 4 is the timeout on both.
+  nc -z -w 4 "$NET_HOST" 443 >/dev/null 2>&1
+}
+
 net_cause() {
-  if /usr/bin/dscacheutil -q host -a name "$NET_HOST" 2>/dev/null | grep -q 'address:'; then
+  if python3 -c "import socket; socket.getaddrinfo('$NET_HOST', 443)" >/dev/null 2>&1; then
     echo "DNS resolves but port 443 is unreachable"
   else
     echo "DNS does not resolve $NET_HOST"
   fi
 }
 
-caffeinate -ims -w $$ >/dev/null 2>&1 &     # hold the wake for the wait itself; retires with this script
+[ "$HAVE_CAFF" = "1" ] && { caffeinate -ims -w $$ >/dev/null 2>&1 & }   # hold the wake for the wait itself
 NET_T0=$(date +%s)
 NET_DEADLINE=$((NET_T0 + NET_WAIT_SECS))
 while ! net_up; do
@@ -125,10 +155,15 @@ while ! net_up; do
     mkdir -p "$(dirname "$RECEIPT_G")"
     if ! grep -qE '"status": "(sent|rendered_not_sent)"' "$RECEIPT_G" 2>/dev/null; then
       PRIOR_STAGE=$(grep -o '"stage": "[^"]*"' "$RECEIPT_G" 2>/dev/null)
-      printf '{\n  "date": "%s",\n  "status": "failed",\n  "stage": "no network at fire time",\n  "error": "%s after waiting %ss. The Mac was probably in a DarkWake on battery, which brings no Wi-Fi. The catch-up retries every 15 minutes; mains power overnight fixes it.",\n  "checked_at": "%s"\n}\n' \
-        "$TODAY_G" "$CAUSE" "$WAITED" "$(date '+%Y-%m-%dT%H:%M:%S%z')" > "$RECEIPT_G"
+      if [ "$(uname)" = "Darwin" ]; then
+        NET_ERR="$CAUSE after waiting ${WAITED}s. This is often a DarkWake on battery, which brings no Wi-Fi. The catch-up retries every 15 minutes; mains power overnight fixes it."
+      else
+        NET_ERR="$CAUSE after waiting ${WAITED}s. The catch-up retries every 15 minutes."
+      fi
+      printf '{\n  "date": "%s",\n  "status": "failed",\n  "stage": "no network at fire time",\n  "error": "%s",\n  "checked_at": "%s"\n}\n' \
+        "$TODAY_G" "$NET_ERR" "$(date '+%Y-%m-%dT%H:%M:%S%z')" > "$RECEIPT_G"
       if [ "$PRIOR_STAGE" != '"stage": "no network at fire time"' ]; then
-        /usr/bin/osascript -e "display notification \"$CAUSE. The catch-up will retry once there is a network.\" with title \"⚠️ Morning brief waiting for network\" subtitle \"No network at fire time\" sound name \"Basso\"" >/dev/null 2>&1
+        osa_notify "⚠️ Morning brief waiting for network" "No network at fire time" "$CAUSE. The catch-up will retry once there is a network."
       fi
     fi
     python3 "$ONTIME" record --date "$TODAY_G" >> "$LOG" 2>&1
@@ -146,6 +181,10 @@ echo "===== $(date '+%Y-%m-%d %H:%M:%S') starting /morning --prep$MODE_NOTE ====
 # --print: headless, single-shot. --permission-mode acceptEdits lets it write the
 # plan file without a prompt. The --prep path is read-only beyond local file writes;
 # it never performs a never_auto external action (those are interactive-only by design).
+#
+# --allowedTools: permits Bash (for python3 engine calls) and MCP connectors (for live
+# data reads: Jira, Notion, Slack, etc). This preempts permission prompts on a fresh
+# account where these are not yet allowed.
 #
 # Bounded with a watchdog rather than `timeout`, which macOS does not ship. An
 # unbounded headless invocation once burned 43 minutes failing to authenticate
@@ -181,9 +220,17 @@ LOG_START=$(wc -c < "$LOG" 2>/dev/null || echo 0)
 # The belt-and-braces half is a scheduled wake, which is a machine-level power
 # setting and deliberately NOT done from this script:
 #   sudo pmset repeat wakeorpoweron MTWRF 07:50:00
-caffeinate -ims claude --print "/morning --prep" \
-  --permission-mode acceptEdits \
-  >> "$LOG" 2>&1 &
+if [ "$HAVE_CAFF" = "1" ]; then
+  caffeinate -ims claude --print "/morning --prep" \
+    --permission-mode acceptEdits \
+    --allowedTools "Bash(python3 morning/engine/*)" "mcp__*" \
+    >> "$LOG" 2>&1 &
+else
+  claude --print "/morning --prep" \
+    --permission-mode acceptEdits \
+    --allowedTools "Bash(python3 morning/engine/*)" "mcp__*" \
+    >> "$LOG" 2>&1 &
+fi
 CLAUDE_PID=$!
 # WALL-CLOCK-AWARE WATCHDOG (V3-TO-V4 row A4). `sleep 3000` suspends with the
 # machine, so a run that froze in a DarkWake and thawed at lid-open froze and
@@ -201,7 +248,7 @@ WD_TICK=15
     sleep "$WD_TICK"
     now=$(date +%s); gap=$((now - last))
     if [ "$gap" -gt $((WD_TICK * 4 + 60)) ]; then
-      echo "watchdog: machine slept for about $((gap / 60)) min (wall clock $(date -r "$last" '+%H:%M:%S') to $(date -r "$now" '+%H:%M:%S')), not counted against the budget"
+      echo "watchdog: machine slept for about $((gap / 60)) min (wall clock $(fmt_time "$last") to $(fmt_time "$now")), not counted against the budget"
     else
       awake=$((awake + gap))
     fi
@@ -235,9 +282,9 @@ echo "===== $(date '+%Y-%m-%d %H:%M:%S') claude finished (exit $STATUS) =====" >
 # thawed on 2026-09-05 at 21:54 wrote its failed receipt to a Saturday and left
 # the real weekday with no receipt at all.
 TODAY="$TODAY_G"
-PLAN="$WORKDIR/01-sprint-operations/current/morning-plan-$TODAY.md"
-RECEIPT="$WORKDIR/05-automation/agent-manager/delivery-receipts/$TODAY.json"
-NOTIFIER="$WORKDIR/05-automation/agent-manager/scripts/notify.py"
+PLAN="$WORKDIR/morning/briefs/$TODAY.md"
+RECEIPT="$WORKDIR/morning/state/receipts/$TODAY.json"
+NOTIFIER="$WORKDIR/morning/engine/notify.py"
 
 # Optional overrides (channel, webhook). Absent by default.
 [ -f "$HOME/.config/morning-loop/notify.env" ] && . "$HOME/.config/morning-loop/notify.env"
@@ -253,11 +300,11 @@ NOTIFIER="$WORKDIR/05-automation/agent-manager/scripts/notify.py"
 alert_on_miss() {
   reason="$1"; detail="$2"
   echo "alert: $reason - $detail" >> "$LOG"
-  /usr/bin/osascript -e "display notification \"$detail\" with title \"⚠️ Morning brief did NOT run\" subtitle \"$reason\" sound name \"Basso\"" >/dev/null 2>&1
-  mkdir -p "$WORKDIR/05-automation/agent-manager/delivery-receipts"
+  osa_notify "⚠️ Morning brief did NOT run" "$reason" "$detail"
+  mkdir -p "$WORKDIR/morning/state/receipts"
   printf '{\n  "date": "%s",\n  "status": "failed",\n  "stage": "%s",\n  "error": "%s",\n  "checked_at": "%s"\n}\n' \
     "$TODAY" "$reason" "$detail" "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
-    > "$WORKDIR/05-automation/agent-manager/delivery-receipts/$TODAY.json"
+    > "$WORKDIR/morning/state/receipts/$TODAY.json"
 }
 
 # This run's slice of the cumulative log. Hoisted out of the diagnosis branch
@@ -267,23 +314,23 @@ RUN_LOG=$(tail -c "+$((LOG_START + 1))" "$LOG" 2>/dev/null)
 # --------------------------------------------------------------------------
 # alert_partial. A watchdog kill mid-pre-draft is NOT a missing brief: the brief
 # went out and the receipt says "sent", so the block below reports "already
-# delivered" and says nothing at all. Run #30 (2026-08-21) lost a planned draft
+# delivered" and says nothing at all. One early run lost a planned draft
 # exactly that way and nobody was told. This notifies WITHOUT overwriting the
 # good receipt, and leaves a sidecar so tomorrow's HEALTH check can see it.
 # --------------------------------------------------------------------------
 alert_partial() {
   reason="$1"; detail="$2"
   echo "alert(partial): $reason - $detail" >> "$LOG"
-  /usr/bin/osascript -e "display notification \"$detail\" with title \"⚠️ Brief delivered, drafting cut short\" subtitle \"$reason\" sound name \"Basso\"" >/dev/null 2>&1
+  osa_notify "⚠️ Brief delivered, drafting cut short" "$reason" "$detail"
   printf '{\n  "date": "%s",\n  "status": "partial",\n  "stage": "%s",\n  "detail": "%s",\n  "checked_at": "%s"\n}\n' \
     "$TODAY" "$reason" "$detail" "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
-    > "$WORKDIR/05-automation/agent-manager/delivery-receipts/$TODAY.partial.json"
+    > "$WORKDIR/morning/state/receipts/$TODAY.partial.json"
 }
 
 # Did the watchdog cut the run off? Report it whether or not the brief landed.
 SLEPT_MIN=$(printf '%s' "$RUN_LOG" | sed -n 's/^watchdog: machine slept for about \([0-9]*\) min.*/\1/p' | awk '{s+=$1} END {print s+0}')
 if printf '%s' "$RUN_LOG" | grep -q "watchdog: prep exceeded"; then
-  DRAFT_DIR="$WORKDIR/01-sprint-operations/current/agent-drafts/$TODAY"
+  DRAFT_DIR="$WORKDIR/morning/drafts/$TODAY"
   N_DRAFTS=$(ls -1 "$DRAFT_DIR"/*.md 2>/dev/null | wc -l | tr -d ' ')
   N_VERIFIED=$(grep -l "VERIFY RESULTS" "$DRAFT_DIR"/*.md 2>/dev/null | wc -l | tr -d ' ')
   if [ "$SLEPT_MIN" -gt 0 ]; then
@@ -292,15 +339,15 @@ if printf '%s' "$RUN_LOG" | grep -q "watchdog: prep exceeded"; then
     alert_partial "Watchdog killed the run" "$N_DRAFTS drafts written, $N_VERIFIED verified. The brief still says drafting. Run /morning to finish and grade them."
   fi
 
-  # A watchdog-killed run is otherwise INVISIBLE in the KR 3.2 evidence trail. The
+  # A watchdog-killed run is otherwise INVISIBLE in the run log. The
   # brief can land and Phase 2c never runs, so nothing writes the run-log line, and
   # the loop undercounts a run that did deliver. 2026-08-21 was lost exactly this
   # way and was only noticed on 2026-08-24 by counting run-log dates against the
   # delivery receipts. So log it here, from the runner, which is the only thing
   # still alive at this point.
-  printf '\n- %s run: **watchdog-killed after 50 min of awake time**, auto-logged by run-prep.sh because Phase 2c never ran. Pre-drafted **%s** file(s) in `agent-drafts/%s/`, **%s** carrying a verify stamp. Brief delivery: see `delivery-receipts/%s.json`. This line exists so the run is not invisible in the KR 3.2 trail; the qualitative detail is absent because the run was killed before it could write it.\n' \
+  printf '\n- %s run: **watchdog-killed after 50 min of awake time**, auto-logged by run-prep.sh because Phase 2c never ran. Pre-drafted **%s** file(s) in `agent-drafts/%s/`, **%s** carrying a verify stamp. Brief delivery: see `delivery-receipts/%s.json`. This line exists so the run is not invisible in the run log; the qualitative detail is absent because the run was killed before it could write it.\n' \
     "$TODAY" "$N_DRAFTS" "$TODAY" "$N_VERIFIED" "$TODAY" \
-    >> "$WORKDIR/05-automation/agent-manager/run-log.md"
+    >> "$WORKDIR/morning/state/run-log.md"
 fi
 
 if grep -qE '"status": "(sent|rendered_not_sent)"' "$RECEIPT" 2>/dev/null; then
@@ -313,30 +360,31 @@ elif [ ! -f "$PLAN" ]; then
   # as a login expiry forever. Four misses were misattributed that way before the
   # 2026-08-20 run, whose real cause was machine sleep, made it obvious.
   if [ "$SLEPT_MIN" -gt 0 ] || printf '%s' "$RUN_LOG" | grep -qi "went to sleep\|Connection closed mid-response"; then
-    alert_on_miss "The Mac slept mid-run" "launchd woke it, macOS put it back to sleep before the run finished. Check caffeinate is in run-prep.sh, then run /morning."
+    if [ "$(uname)" = "Darwin" ]; then
+      alert_on_miss "The Mac slept mid-run" "launchd woke it, macOS put it back to sleep before the run finished. Check caffeinate is in run-prep.sh, then run /morning."
+    else
+      alert_on_miss "The system slept mid-run" "The run started but was interrupted by sleep before it finished. Check the scheduler config, then run /morning."
+    fi
   elif printf '%s' "$RUN_LOG" | grep -qi "Failed to authenticate\|OAuth session expired\|Invalid API key\|Please run.*login"; then
     alert_on_miss "Claude login expired" "Run: claude /login in the terminal, then /morning to get today's brief."
   elif printf '%s' "$RUN_LOG" | grep -qi "ENOTFOUND\|EAI_AGAIN\|Can't reach the API server\|getaddrinfo\|Could not resolve host\|Network is unreachable"; then
-    # 2026-09-28: the machine woke at 07:50:01 exactly as scheduled, caffeinate held
-    # it, and the run still failed after 37 minutes on DNS. Cause: the wake was a
-    # DarkWake ON BATTERY (60%), and on battery a DarkWake does not associate Wi-Fi.
-    # So this is not a network outage and not an auth problem, it is the mains
-    # requirement being load-bearing rather than advisory. It fell through to the
-    # generic "prep failed" before this branch existed, which is the unactionable
-    # message the whole classifier exists to avoid.
     # Since the NETWORK GATE, a run only starts with a network, so reaching this
     # branch means the network went away DURING the run.
     alert_on_miss "Lost the network mid-run" "The run started with a network and then lost it, so the API became unreachable. The catch-up will retry once it has a network."
   elif printf '%s' "$RUN_LOG" | grep -qi "mcp.*timeout\|mcp.*timed out\|sse.*closed\|sse.*disconnected\|sse.*timeout\|event stream.*closed\|event stream.*ended\|econnreset\|connection reset by peer"; then
-    # Ported from Xitong's run-prep.template.sh, merged 2026-09-25 (MR 6). A tool
-    # server dropping its stream mid-run used to fall through to the generic
-    # "prep failed", which tells you nothing actionable. Ordered after the sleep
-    # and auth checks so the more specific causes still win.
     alert_on_miss "An MCP server dropped mid-run (SSE/stream timeout)" "A tool server's stream died, so the run could not finish. Re-run /morning manually; if it recurs, reconnect that MCP server."
   elif [ $STATUS -ne 0 ]; then
-    alert_on_miss "The prep run failed (exit $STATUS)" "No brief today. Check launchd.log, then run /morning manually."
+    if [ "$(uname)" = "Darwin" ]; then
+      alert_on_miss "The prep run failed (exit $STATUS)" "No brief today. Check launchd.log, then run /morning manually."
+    else
+      alert_on_miss "The prep run failed (exit $STATUS)" "No brief today. Check the runner log, then run /morning manually."
+    fi
   else
-    alert_on_miss "No plan file was written" "The run finished but produced nothing. Check launchd.log."
+    if [ "$(uname)" = "Darwin" ]; then
+      alert_on_miss "No plan file was written" "The run finished but produced nothing. Check launchd.log."
+    else
+      alert_on_miss "No plan file was written" "The run finished but produced nothing. Check the runner log."
+    fi
   fi
   STATUS=1
 else
@@ -357,10 +405,10 @@ fi
 # gets there, and then the brief still lists the drafts as unchecked to-dos with
 # no paths, so finished work reads as pending work.
 #
-# That is not hypothetical. On 2026-08-25 the run delivered brief #32 at 11:32,
+# That is not hypothetical. On one early morning the run delivered the brief at 11:32,
 # wrote 7 drafts between 11:35 and 11:42, was killed at 11:51, and never updated
-# the brief. The owner read #32 and asked "where is the Liah 1:1 prep brief?" It had
-# existed on disk for two hours. Run #30 lost the grading of 5 drafts the same way.
+# the brief. The owner read #32 and asked "where is the 1:1 prep brief?" It had
+# existed on disk for two hours. Another run lost the grading of 5 drafts the same way.
 #
 # So: if drafts exist for today and the plan file is OLDER than the newest draft,
 # the runner appends a factual index of what was produced and re-delivers. The
@@ -369,7 +417,7 @@ fi
 # deliberately does not try to describe the drafts, because the runner cannot read
 # them and a fabricated summary would be worse than none.
 # --------------------------------------------------------------------------
-DRAFT_DIR="$WORKDIR/01-sprint-operations/current/agent-drafts/$TODAY"
+DRAFT_DIR="$WORKDIR/morning/drafts/$TODAY"
 if [ -d "$DRAFT_DIR" ] && [ -n "$(ls -A "$DRAFT_DIR"/*.md 2>/dev/null)" ] && [ -f "$PLAN" ]; then
   NEWEST_DRAFT=$(ls -t "$DRAFT_DIR"/*.md 2>/dev/null | head -1)
   if [ -n "$NEWEST_DRAFT" ] && [ "$NEWEST_DRAFT" -nt "$PLAN" ]; then
@@ -384,7 +432,7 @@ if [ -d "$DRAFT_DIR" ] && [ -n "$(ls -A "$DRAFT_DIR"/*.md 2>/dev/null)" ] && [ -
         [ -f "$f" ] || continue
         V=$(grep -m1 -o 'Verdict: *[A-Za-z ]*' "$f" 2>/dev/null | sed 's/Verdict: *//' | tr -d '*')
         [ -z "$V" ] && V="not graded"
-        printf -- '- **%s** · %s · `%s`\n' "$(basename "$f" .md)" "$V" "01-sprint-operations/current/agent-drafts/$TODAY/$(basename "$f")"
+        printf -- '- **%s** · %s · `%s`\n' "$(basename "$f" .md)" "$V" "morning/drafts/$TODAY/$(basename "$f")"
       done
       printf '\nTo grade the ungraded ones and ship any of them, run `/morning` with no flag.\n'
     } >> "$PLAN"
