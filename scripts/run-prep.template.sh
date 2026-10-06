@@ -7,7 +7,25 @@
 export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 WORKDIR="<PATH TO YOUR WORKSPACE>"   # FILL: the folder you ran setup-workspace.sh on
-LOG="$WORKDIR/morning/state/runner.log"
+
+# LAYOUT. Two workspace layouts are in use: morning/ (scripts/setup.py) and the v4
+# layout (scripts/setup_workspace.py, ADOPT-MORNING.md), where /morning writes the
+# plan to 01-sprint-operations/current/ and calls 05-automation/agent-manager/scripts/.
+# The runner has to read and write where /morning does, so resolve it once here.
+if [ -d "$WORKDIR/morning/engine" ]; then
+  ENGINE_REL="morning/engine"
+  STATE="$WORKDIR/morning/state";          LOG="$STATE/runner.log"
+  RECEIPTS="$STATE/receipts"
+  PLAN_DIR="$WORKDIR/morning/briefs";      PLAN_PREFIX=""
+  DRAFTS_REL="morning/drafts"
+else
+  ENGINE_REL="05-automation/agent-manager/scripts"
+  STATE="$WORKDIR/05-automation/agent-manager"; LOG="$STATE/launchd.log"
+  RECEIPTS="$STATE/delivery-receipts"
+  PLAN_DIR="$WORKDIR/01-sprint-operations/current"; PLAN_PREFIX="morning-plan-"
+  DRAFTS_REL="01-sprint-operations/current/agent-drafts"
+fi
+ENGINE="$WORKDIR/$ENGINE_REL"
 cd "$WORKDIR" || { echo "$(date) FAILED cd $WORKDIR" >> "$LOG"; exit 1; }
 
 # ---------------------------------------------------------------------------
@@ -41,8 +59,8 @@ IF_MISSING=0
 [ "$1" = "--if-missing" ] && IF_MISSING=1
 
 TODAY_G=$(date '+%Y-%m-%d')
-RECEIPT_G="$WORKDIR/morning/state/receipts/$TODAY_G.json"
-PLAN_G="$WORKDIR/morning/briefs/$TODAY_G.md"
+RECEIPT_G="$RECEIPTS/$TODAY_G.json"
+PLAN_G="$PLAN_DIR/$PLAN_PREFIX$TODAY_G.md"
 
 if [ "$IF_MISSING" = "1" ]; then
   # Weekdays only. %u is 1=Mon .. 7=Sun.
@@ -84,7 +102,7 @@ fmt_time() {   # fmt_time <unix_seconds>
 # check-then-write race. This closes the scheduled-vs-manual overlap an early adopter found:
 # before this, a 07:52 run still going at 09:30 and a hand-invoked /morning could
 # both write the same plan file and the same receipt.
-LOCKDIR="$WORKDIR/morning/state/.run.lock"
+LOCKDIR="$STATE/.run.lock"
 if ! mkdir "$LOCKDIR" 2>/dev/null; then
   LOCKPID=$(cat "$LOCKDIR/pid" 2>/dev/null)
   if [ -n "$LOCKPID" ] && kill -0 "$LOCKPID" 2>/dev/null; then
@@ -122,7 +140,7 @@ trap 'rm -rf "$LOCKDIR"' EXIT INT TERM
 NET_HOST="${MORNING_NET_HOST:-api.anthropic.com}"
 NET_WAIT_SECS="${MORNING_NET_WAIT_SECS:-300}"
 NET_STEP_SECS="${MORNING_NET_STEP_SECS:-10}"
-ONTIME="$WORKDIR/morning/engine/ontime.py"
+ONTIME="$ENGINE/ontime.py"
 
 # Portable network probe: Python socket on all platforms, fallback to nc.
 # Skip with MORNING_SKIP_NET_GATE=1 (for tests).
@@ -223,12 +241,12 @@ LOG_START=$(wc -c < "$LOG" 2>/dev/null || echo 0)
 if [ "$HAVE_CAFF" = "1" ]; then
   caffeinate -ims claude --print "/morning --prep" \
     --permission-mode acceptEdits \
-    --allowedTools "Bash(python3 morning/engine/*)" "mcp__*" \
+    --allowedTools "Bash(python3 $ENGINE_REL/*)" "mcp__*" \
     >> "$LOG" 2>&1 &
 else
   claude --print "/morning --prep" \
     --permission-mode acceptEdits \
-    --allowedTools "Bash(python3 morning/engine/*)" "mcp__*" \
+    --allowedTools "Bash(python3 $ENGINE_REL/*)" "mcp__*" \
     >> "$LOG" 2>&1 &
 fi
 CLAUDE_PID=$!
@@ -282,9 +300,9 @@ echo "===== $(date '+%Y-%m-%d %H:%M:%S') claude finished (exit $STATUS) =====" >
 # thawed on 2026-09-05 at 21:54 wrote its failed receipt to a Saturday and left
 # the real weekday with no receipt at all.
 TODAY="$TODAY_G"
-PLAN="$WORKDIR/morning/briefs/$TODAY.md"
-RECEIPT="$WORKDIR/morning/state/receipts/$TODAY.json"
-NOTIFIER="$WORKDIR/morning/engine/notify.py"
+PLAN="$PLAN_DIR/$PLAN_PREFIX$TODAY.md"
+RECEIPT="$RECEIPTS/$TODAY.json"
+NOTIFIER="$ENGINE/notify.py"
 
 # Optional overrides (channel, webhook). Absent by default.
 [ -f "$HOME/.config/morning-loop/notify.env" ] && . "$HOME/.config/morning-loop/notify.env"
@@ -301,10 +319,10 @@ alert_on_miss() {
   reason="$1"; detail="$2"
   echo "alert: $reason - $detail" >> "$LOG"
   osa_notify "⚠️ Morning brief did NOT run" "$reason" "$detail"
-  mkdir -p "$WORKDIR/morning/state/receipts"
+  mkdir -p "$RECEIPTS"
   printf '{\n  "date": "%s",\n  "status": "failed",\n  "stage": "%s",\n  "error": "%s",\n  "checked_at": "%s"\n}\n' \
     "$TODAY" "$reason" "$detail" "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
-    > "$WORKDIR/morning/state/receipts/$TODAY.json"
+    > "$RECEIPTS/$TODAY.json"
 }
 
 # This run's slice of the cumulative log. Hoisted out of the diagnosis branch
@@ -324,13 +342,13 @@ alert_partial() {
   osa_notify "⚠️ Brief delivered, drafting cut short" "$reason" "$detail"
   printf '{\n  "date": "%s",\n  "status": "partial",\n  "stage": "%s",\n  "detail": "%s",\n  "checked_at": "%s"\n}\n' \
     "$TODAY" "$reason" "$detail" "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
-    > "$WORKDIR/morning/state/receipts/$TODAY.partial.json"
+    > "$RECEIPTS/$TODAY.partial.json"
 }
 
 # Did the watchdog cut the run off? Report it whether or not the brief landed.
 SLEPT_MIN=$(printf '%s' "$RUN_LOG" | sed -n 's/^watchdog: machine slept for about \([0-9]*\) min.*/\1/p' | awk '{s+=$1} END {print s+0}')
 if printf '%s' "$RUN_LOG" | grep -q "watchdog: prep exceeded"; then
-  DRAFT_DIR="$WORKDIR/morning/drafts/$TODAY"
+  DRAFT_DIR="$WORKDIR/$DRAFTS_REL/$TODAY"
   N_DRAFTS=$(ls -1 "$DRAFT_DIR"/*.md 2>/dev/null | wc -l | tr -d ' ')
   N_VERIFIED=$(grep -l "VERIFY RESULTS" "$DRAFT_DIR"/*.md 2>/dev/null | wc -l | tr -d ' ')
   if [ "$SLEPT_MIN" -gt 0 ]; then
@@ -347,7 +365,7 @@ if printf '%s' "$RUN_LOG" | grep -q "watchdog: prep exceeded"; then
   # still alive at this point.
   printf '\n- %s run: **watchdog-killed after 50 min of awake time**, auto-logged by run-prep.sh because Phase 2c never ran. Pre-drafted **%s** file(s) in `agent-drafts/%s/`, **%s** carrying a verify stamp. Brief delivery: see `delivery-receipts/%s.json`. This line exists so the run is not invisible in the run log; the qualitative detail is absent because the run was killed before it could write it.\n' \
     "$TODAY" "$N_DRAFTS" "$TODAY" "$N_VERIFIED" "$TODAY" \
-    >> "$WORKDIR/morning/state/run-log.md"
+    >> "$STATE/run-log.md"
 fi
 
 if grep -qE '"status": "(sent|rendered_not_sent)"' "$RECEIPT" 2>/dev/null; then
@@ -417,7 +435,7 @@ fi
 # deliberately does not try to describe the drafts, because the runner cannot read
 # them and a fabricated summary would be worse than none.
 # --------------------------------------------------------------------------
-DRAFT_DIR="$WORKDIR/morning/drafts/$TODAY"
+DRAFT_DIR="$WORKDIR/$DRAFTS_REL/$TODAY"
 if [ -d "$DRAFT_DIR" ] && [ -n "$(ls -A "$DRAFT_DIR"/*.md 2>/dev/null)" ] && [ -f "$PLAN" ]; then
   NEWEST_DRAFT=$(ls -t "$DRAFT_DIR"/*.md 2>/dev/null | head -1)
   if [ -n "$NEWEST_DRAFT" ] && [ "$NEWEST_DRAFT" -nt "$PLAN" ]; then
@@ -432,7 +450,7 @@ if [ -d "$DRAFT_DIR" ] && [ -n "$(ls -A "$DRAFT_DIR"/*.md 2>/dev/null)" ] && [ -
         [ -f "$f" ] || continue
         V=$(grep -m1 -o 'Verdict: *[A-Za-z ]*' "$f" 2>/dev/null | sed 's/Verdict: *//' | tr -d '*')
         [ -z "$V" ] && V="not graded"
-        printf -- '- **%s** · %s · `%s`\n' "$(basename "$f" .md)" "$V" "morning/drafts/$TODAY/$(basename "$f")"
+        printf -- '- **%s** · %s · `%s`\n' "$(basename "$f" .md)" "$V" "$DRAFTS_REL/$TODAY/$(basename "$f")"
       done
       printf '\nTo grade the ungraded ones and ship any of them, run `/morning` with no flag.\n'
     } >> "$PLAN"
