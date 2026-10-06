@@ -7,7 +7,7 @@ links aren't allowed, e.g. Windows without Developer Mode), so `git pull` in the
 package updates every workspace that uses it. Nothing of yours is ever overwritten:
 anything already there is left alone and reported. See docs/LAYOUT.md.
 
-    python3 scripts/setup.py ~/morning                     # a new folder
+    python3 scripts/setup.py ~/morning-brief               # a new folder
     python3 scripts/setup.py ~/notes --client opencode     # inside an existing one
     python3 scripts/setup.py ~/notes --dry-run
 """
@@ -60,7 +60,7 @@ def find_working_python() -> str:
                 r = subprocess.run(cmd + ["-c", "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)"],
                                   capture_output=True, timeout=2)
                 if r.returncode == 0:
-                    return cmd[0]  # Return just the command name (py, python3, or python)
+                    return " ".join(cmd)  # the command that was verified, e.g. "py -3", not just "py"
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
     return "python3"  # fallback
@@ -68,7 +68,7 @@ def find_working_python() -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("folder", nargs="?", default="~/morning")
+    ap.add_argument("folder", nargs="?", default="~/morning-brief")   # ~/morning made ~/morning/morning
     ap.add_argument("--client", choices=["claude", "opencode", "codex"], default=None)
     ap.add_argument("--copy", action="store_true", help="copy the package in instead of linking it")
     ap.add_argument("--dry-run", action="store_true")
@@ -161,7 +161,8 @@ def main() -> int:
                 text = re.sub(r"^(  channel:) macos", r"\1 file", text, count=1, flags=re.M)
             if rel == "config.yml":
                 # Write the working Python interpreter so commands use the same one that setup.py found
-                text = re.sub(r"^(  python:) python3", rf"\1 {py_cmd}", text, count=1, flags=re.M)
+                # Quoted: "py -3" holds a space.
+                text = re.sub(r"^(  python:) python3", rf'\1 "{py_cmd}"', text, count=1, flags=re.M)
             at.parent.mkdir(parents=True, exist_ok=True)
             at.write_text(text, encoding="utf-8")
         say(f"+ morning/{rel}")
