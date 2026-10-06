@@ -211,9 +211,10 @@ Get-ScheduledTask -TaskName MorningLoop-*      # expect EXACTLY two: MorningLoop
 
 Exit codes (Task Scheduler "Last Run Result"): `0` delivered (or a catch-up tick with nothing owed), `2` another run holds the lock, `3` no plan file written, `4` plan written but not delivered, `10` the optional VPN never came up, `75` no network at fire time (the catch-up retries), `124` the watchdog stopped the run after its awake-time budget (`MORNING_WATCHDOG_SECS`, default 50 minutes).
 
-Three things that bite on Windows:
+Four things that bite on Windows:
 
 - **Force UTF-8 on the console before logging claude's output**, or the log fills with mojibake. The template does this; keep it.
+- **`-WindowStyle Hidden` still flashes a console.** The scheduler paints the window before PowerShell applies the flag, which is visible every 15 minutes on the catch-up. The registration script therefore starts both tasks through `run-prep-hidden.vbs` (`wscript.exe`, no console) and writes that file next to `run-prep.ps1`. Re-run `register-prep-task.ps1` after a `git pull` to pick it up; delete the `.vbs` when you remove the tasks.
 - **Prefer `Register-ScheduledTask` over `schtasks.exe`.** Quoting a `-File` path with spaces through `schtasks` is where most first attempts die.
 - **`Start-Process -PassThru` can hand back a null ExitCode**, and exiting with null is `0x0`, which reports a total failure as success. The template derives the exit code from the plan file and receipt instead. Do not simplify that back to the process exit code.
 
